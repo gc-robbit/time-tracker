@@ -1,0 +1,9 @@
+# Dependabot configuration for the time-tracker project.
+# Docs: https://docs.github.com/en/code-security/dependabot/dependabot-version-updates
+version: 2
+updates:
+  # Python dependencies declared in pyproject.toml / uv.lock
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"

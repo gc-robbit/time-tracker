@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import sqlite3
 import sys
 from datetime import datetime, timedelta
 
@@ -13,7 +14,7 @@ from .durations import (
     format_signed,
     parse_duration,
 )
-from .storage import Storage
+from .storage import Storage, default_db_path
 from .tracker import InvalidTransitionError, ProjectDay, Tracker
 
 
@@ -232,5 +233,11 @@ def main(argv: list[str] | None = None) -> int:
             _dispatch(args, Tracker(storage))
     except (InvalidTransitionError, ValueError) as error:
         print(f"Error: {error}", file=sys.stderr)
+        return 1
+    except sqlite3.Error as error:
+        print(
+            f"Database error: {error} (db: {default_db_path()})",
+            file=sys.stderr,
+        )
         return 1
     return 0

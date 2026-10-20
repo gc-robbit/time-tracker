@@ -169,3 +169,11 @@ def test_config_invalid_duration(capsys) -> None:
 def test_config_missing_value(capsys) -> None:
     assert main(["config", "workday"]) == 1
     assert "missing value" in capsys.readouterr().err
+
+
+def test_corrupt_db_reports_clean_error(tmp_path, capsys) -> None:
+    (tmp_path / "cli.db").write_bytes(b"this is not a sqlite database")
+    assert main(["status"]) == 1
+    err = capsys.readouterr().err
+    assert "Database error" in err
+    assert "Traceback" not in err

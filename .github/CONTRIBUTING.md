@@ -2,6 +2,15 @@
 
 This project uses [uv](https://docs.astral.sh/uv/) for dependency management.
 
+## What you may contribute
+
+- **Bug fixes** — please raise an issue first.
+- **Features** — please raise an issue first.
+- **Documentation improvements** — always welcome.
+
+Features are accepted if they align with the minimalist / simplicity intent
+of this little project.
+
 ## Development
 
 ```sh

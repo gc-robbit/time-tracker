@@ -1,0 +1,33 @@
+[project]
+name = "time-tracker"
+version = "0.1.0"
+description = "A time tracking application"
+readme = "README.md"
+authors = [
+    { name = "Robert Dahlström", email = "robert@dahlstrom.email" }
+]
+requires-python = ">=3.13"
+dependencies = []
+
+[project.scripts]
+time-tracker = "time_tracker:main"
+
+[build-system]
+requires = ["uv_build>=0.12.20,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.17.1",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

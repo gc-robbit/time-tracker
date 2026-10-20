@@ -1,4 +1,4 @@
-"""Tests for the generated single-file distribution (dist/time-tracker.py)."""
+"""Tests for the generated single-file distribution (dist/time-tracker)."""
 
 import os
 import subprocess

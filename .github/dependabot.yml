@@ -7,3 +7,9 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+
+  # GitHub Actions used by CI
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

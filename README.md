@@ -14,8 +14,8 @@ repo ships a ready-to-run single-file copy as `dist/time-tracker` — see
 ```sh
 time-tracker start web        # begin tracking on a project
 time-tracker start            # falls back to the default project
-time-tracker pause            # pause the running session
-time-tracker continue         # resume a paused session (alias: resume)
+time-tracker pause            # pause the running session (aliases: lunch, out)
+time-tracker continue         # resume a paused session (aliases: resume, back)
 time-tracker stop             # end the current session and show its totals
 time-tracker status           # current state + today's delta (default command)
 time-tracker report           # worked time per project + global flex history

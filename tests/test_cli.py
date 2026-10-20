@@ -38,6 +38,12 @@ def test_full_flow(capsys) -> None:
     assert main(["resume"]) == 0
     assert "Resumed at" in capsys.readouterr().out
 
+    for alias in ("lunch", "out"):
+        assert main([alias]) == 0
+        assert "Paused at" in capsys.readouterr().out
+        assert main(["back"]) == 0
+        assert "Resumed at" in capsys.readouterr().out
+
     assert main(["stop"]) == 0
     out = capsys.readouterr().out
     assert "Stopped at" in out

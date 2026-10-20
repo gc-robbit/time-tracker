@@ -508,10 +508,14 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="?",
         help="project to track time against (falls back to the configured default)",
     )
-    subparsers.add_parser("pause", help="pause the running session")
+    subparsers.add_parser(
+        "pause",
+        aliases=["lunch", "out"],
+        help="pause the running session",
+    )
     subparsers.add_parser(
         "continue",
-        aliases=["resume"],
+        aliases=["resume", "back"],
         help="resume a paused session",
     )
     subparsers.add_parser("stop", help="stop the current session")
@@ -668,7 +672,7 @@ def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
             f"Started '{project}' at {_clock(event.ts)}. "
             "Run 'time-tracker stop' when you're done."
         )
-    elif command == "pause":
+    elif command in ("pause", "lunch", "out"):
         event = tracker.pause()
         session = tracker.current_session()
         worked = session.worked if session else timedelta(0)
@@ -677,7 +681,7 @@ def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
             f"Paused at {_clock(event.ts)}{where}. "
             f"Session worked so far: {format_duration(worked)}."
         )
-    elif command in ("continue", "resume"):
+    elif command in ("continue", "resume", "back"):
         event = tracker.resume()
         print(f"Resumed at {_clock(event.ts)}.")
     elif command == "stop":

@@ -1,2 +1,3 @@
-def main() -> None:
-    print("Hello from time-tracker!")
+from .cli import main
+
+__all__ = ["main"]

@@ -11,6 +11,35 @@ uv run ruff check .  # lint
 uv run ruff format . # format
 ```
 
+## Commit messages
+
+Commit messages must follow [Conventional Commits](https://www.conventionalcommits.org/).
+Pull requests with non-conforming commit messages will not be accepted.
+
+```
+<type>(<optional scope>): <short imperative description>
+```
+
+Common types used in this repo:
+
+- `feat` — a new feature
+- `fix` — a bug fix
+- `perf` — a performance improvement
+- `test` — adding or correcting tests
+- `docs` — documentation only
+- `refactor` — code change that neither fixes nor adds anything
+- `chore` — maintenance (deps, tooling, generated files)
+- `ci` — CI configuration
+
+A body and footer are optional; breaking changes get a `!` after the type (or
+a `BREAKING CHANGE:` footer). Examples from this repo:
+
+```
+feat: support projects
+fix: report sqlite failures as a clean error instead of a traceback
+ci: add GitHub Actions workflow (ruff + pytest)
+```
+
 ## Single-file distribution
 
 `dist/time-tracker` is a generated, standalone copy of this project as a

@@ -16,11 +16,13 @@ def test_no_args_shows_status(capsys) -> None:
 
 
 def test_full_flow(capsys) -> None:
-    assert main(["start"]) == 0
-    assert "Started at" in capsys.readouterr().out
+    assert main(["start", "web"]) == 0
+    assert "Started 'web' at" in capsys.readouterr().out
 
     assert main(["status"]) == 0
-    assert "running" in capsys.readouterr().out
+    status = capsys.readouterr().out
+    assert "running" in status
+    assert "web" in status
 
     assert main(["pause"]) == 0
     assert "Paused at" in capsys.readouterr().out
@@ -39,16 +41,16 @@ def test_full_flow(capsys) -> None:
     assert main(["stop"]) == 0
     out = capsys.readouterr().out
     assert "Stopped at" in out
-    assert "Session worked" in out
+    assert "Session 'web' worked" in out
 
     assert main(["status"]) == 0
     assert "idle" in capsys.readouterr().out
 
 
 def test_double_start_fails(capsys) -> None:
-    assert main(["start"]) == 0
+    assert main(["start", "web"]) == 0
     capsys.readouterr()
-    assert main(["start"]) == 1
+    assert main(["start", "web"]) == 1
     assert "already running" in capsys.readouterr().err
 
 
@@ -68,13 +70,78 @@ def test_report_with_no_data(capsys) -> None:
 
 
 def test_report_after_tracking(capsys) -> None:
-    assert main(["start"]) == 0
+    assert main(["start", "web"]) == 0
     assert main(["stop"]) == 0
     capsys.readouterr()
     assert main(["report"]) == 0
     out = capsys.readouterr().out
-    assert "Date" in out
+    assert "Project: web" in out
+    assert "Flex (global):" in out
     assert "Balance" in out
+
+
+def test_start_without_project_fails(capsys) -> None:
+    assert main(["start"]) == 1
+    err = capsys.readouterr().err
+    assert "no project given" in err
+    assert "default_project" in err
+
+
+def test_default_project_is_used_when_omitted(capsys) -> None:
+    assert main(["config", "default_project", "web"]) == 0
+    capsys.readouterr()
+
+    assert main(["start"]) == 0
+    assert "Started 'web' at" in capsys.readouterr().out
+    assert main(["stop"]) == 0
+
+
+def test_explicit_project_overrides_default(capsys) -> None:
+    assert main(["config", "default_project", "web"]) == 0
+    capsys.readouterr()
+
+    assert main(["start", "design"]) == 0
+    assert "Started 'design' at" in capsys.readouterr().out
+    assert main(["stop"]) == 0
+
+
+def test_report_per_project(capsys) -> None:
+    assert main(["start", "web"]) == 0
+    assert main(["stop"]) == 0
+    assert main(["start", "design"]) == 0
+    assert main(["stop"]) == 0
+    capsys.readouterr()
+
+    assert main(["report", "web"]) == 0
+    out = capsys.readouterr().out
+    assert "web" in out
+    assert "design" not in out
+    assert "Flex" not in out
+
+    assert main(["report", "nope"]) == 0
+    assert "No time tracked for project 'nope'" in capsys.readouterr().out
+
+    assert main(["report"]) == 0
+    out = capsys.readouterr().out
+    assert "Project: web" in out
+    assert "Project: design" in out
+
+
+def test_config_show_includes_default_project(capsys) -> None:
+    assert main(["config"]) == 0
+    out = capsys.readouterr().out
+    assert "8h" in out
+    assert "(not set)" in out
+
+    assert main(["config", "default_project", "web"]) == 0
+    capsys.readouterr()
+    assert main(["config"]) == 0
+    assert "Default project: web" in capsys.readouterr().out
+
+
+def test_config_empty_default_project(capsys) -> None:
+    assert main(["config", "default_project", " "]) == 1
+    assert "must not be empty" in capsys.readouterr().err
 
 
 def test_config_show_and_set(capsys) -> None:

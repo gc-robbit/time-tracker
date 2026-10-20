@@ -35,6 +35,7 @@ class Event:
     id: int
     event_type: str
     ts: datetime
+    project: str | None = None
 
 
 class Storage:
@@ -53,7 +54,8 @@ class Storage:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     event_type TEXT NOT NULL CHECK (event_type IN
                         ('start', 'pause', 'resume', 'stop')),
-                    ts TEXT NOT NULL
+                    ts TEXT NOT NULL,
+                    project TEXT
                 );
                 CREATE TABLE IF NOT EXISTS settings (
                     key TEXT PRIMARY KEY,
@@ -61,8 +63,15 @@ class Storage:
                 );
                 """
             )
+            columns = {
+                row["name"] for row in self._conn.execute("PRAGMA table_info(events)")
+            }
+            if "project" not in columns:
+                self._conn.execute("ALTER TABLE events ADD COLUMN project TEXT")
 
-    def add_event(self, event_type: str, ts: datetime) -> Event:
+    def add_event(
+        self, event_type: str, ts: datetime, project: str | None = None
+    ) -> Event:
         if event_type not in EVENT_TYPES:
             raise ValueError(f"unknown event type: {event_type!r}")
         if ts.tzinfo is None:
@@ -70,20 +79,23 @@ class Storage:
         utc_ts = ts.astimezone(UTC)
         with self._conn:
             cursor = self._conn.execute(
-                "INSERT INTO events (event_type, ts) VALUES (?, ?)",
-                (event_type, utc_ts.isoformat()),
+                "INSERT INTO events (event_type, ts, project) VALUES (?, ?, ?)",
+                (event_type, utc_ts.isoformat(), project),
             )
-        return Event(id=cursor.lastrowid, event_type=event_type, ts=utc_ts)
+        return Event(
+            id=cursor.lastrowid, event_type=event_type, ts=utc_ts, project=project
+        )
 
     def events(self) -> list[Event]:
         rows = self._conn.execute(
-            "SELECT id, event_type, ts FROM events ORDER BY id"
+            "SELECT id, event_type, ts, project FROM events ORDER BY id"
         ).fetchall()
         return [
             Event(
                 id=row["id"],
                 event_type=row["event_type"],
                 ts=datetime.fromisoformat(row["ts"]),
+                project=row["project"],
             )
             for row in rows
         ]

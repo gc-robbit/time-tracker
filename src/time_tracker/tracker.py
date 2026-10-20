@@ -24,6 +24,7 @@ class InvalidTransitionError(Exception):
 class Interval:
     start: datetime
     end: datetime
+    project: str = ""
 
     @property
     def duration(self) -> timedelta:
@@ -34,6 +35,7 @@ class Interval:
 class Session:
     started: datetime
     intervals: tuple[Interval, ...]
+    project: str = ""
     ended: datetime | None = None
 
     @property
@@ -56,6 +58,13 @@ class DaySummary:
     @property
     def delta(self) -> timedelta:
         return self.worked - self.target
+
+
+@dataclass(frozen=True)
+class ProjectDay:
+    project: str
+    day: date
+    worked: timedelta
 
 
 class Tracker:
@@ -89,7 +98,7 @@ class Tracker:
 
     # -- state transitions -------------------------------------------------
 
-    def start(self) -> Event:
+    def start(self, project: str) -> Event:
         state = self.state()
         if state == STATE_RUNNING:
             raise InvalidTransitionError(
@@ -100,7 +109,10 @@ class Tracker:
                 "A session is already in progress but paused "
                 "('continue' to resume it or 'stop' to end it)."
             )
-        return self.storage.add_event("start", self.now())
+        project = project.strip()
+        if not project:
+            raise ValueError("project name must not be empty")
+        return self.storage.add_event("start", self.now(), project=project)
 
     def pause(self) -> Event:
         state = self.state()
@@ -141,6 +153,7 @@ class Tracker:
         intervals: list[Interval] = []
         open_since: datetime | None = None
         ended: datetime | None = None
+        project = ""
 
         for event in self.storage.events():
             if event.event_type == "start":
@@ -148,26 +161,27 @@ class Tracker:
                 intervals = []
                 open_since = event.ts
                 ended = None
+                project = event.project or ""
             elif started is None:
                 continue
             elif event.event_type == "pause":
                 if open_since is not None:
-                    intervals.append(Interval(open_since, event.ts))
+                    intervals.append(Interval(open_since, event.ts, project))
                     open_since = None
             elif event.event_type == "resume":
                 if open_since is None:
                     open_since = event.ts
             elif event.event_type == "stop":
                 if open_since is not None:
-                    intervals.append(Interval(open_since, event.ts))
+                    intervals.append(Interval(open_since, event.ts, project))
                     open_since = None
                 ended = event.ts
 
         if started is None:
             return None
         if ended is None and open_since is not None:
-            intervals.append(Interval(open_since, self.now()))
-        return Session(started, tuple(intervals), ended)
+            intervals.append(Interval(open_since, self.now(), project))
+        return Session(started, tuple(intervals), project, ended)
 
     def intervals(self, end: datetime | None = None) -> list[Interval]:
         """All tracked intervals; the open one (if any) ends at `end`/now.
@@ -177,16 +191,31 @@ class Tracker:
         moment = end or self.now()
         result: list[Interval] = []
         open_since: datetime | None = None
+        project = ""
         for event in self.storage.events():
-            if event.event_type in ("start", "resume"):
+            if event.event_type == "start":
+                if open_since is not None:
+                    result.append(Interval(open_since, event.ts, project))
+                open_since = event.ts
+                project = event.project or ""
+            elif event.event_type == "resume":
                 if open_since is None:
                     open_since = event.ts
             elif open_since is not None:
-                result.append(Interval(open_since, event.ts))
+                result.append(Interval(open_since, event.ts, project))
                 open_since = None
         if open_since is not None:
-            result.append(Interval(open_since, moment))
+            result.append(Interval(open_since, moment, project))
         return result
+
+    @property
+    def default_project(self) -> str | None:
+        """The configured default project, if any."""
+        raw = self.storage.get_setting("default_project")
+        if raw is None:
+            return None
+        raw = raw.strip()
+        return raw or None
 
     def target(self) -> timedelta:
         """The configured workday length (default 8 hours)."""
@@ -222,6 +251,25 @@ class Tracker:
             ZERO,
         )
         return DaySummary(today, worked, self.target())
+
+    def project_days(self, end: datetime | None = None) -> dict[str, list[ProjectDay]]:
+        """Worked time per project, grouped by local day and sorted by date.
+
+        Intervals from sessions started before projects existed group under "".
+        """
+        totals: dict[str, dict[date, timedelta]] = {}
+        for interval in self.intervals(end):
+            day = interval.start.astimezone().date()
+            totals.setdefault(interval.project, {})
+            totals[interval.project][day] = (
+                totals[interval.project].get(day, ZERO) + interval.duration
+            )
+        return {
+            project: [
+                ProjectDay(project, day, worked) for day, worked in sorted(days.items())
+            ]
+            for project, days in sorted(totals.items())
+        }
 
     def flex_balance(self, end: datetime | None = None) -> timedelta:
         """Cumulative flex balance: sum of daily (worked - target) deltas."""

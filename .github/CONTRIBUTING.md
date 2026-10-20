@@ -20,10 +20,36 @@ uv run ruff check .  # lint
 uv run ruff format . # format
 ```
 
+## Commit hooks
+
+The repo uses [prek](https://github.com/j178/prek), a fast drop-in
+replacement for pre-commit, to enforce the commit message rules below. After
+`uv sync`, install the hooks once:
+
+```sh
+uv run prek install -t commit-msg
+```
+
+This installs a `commit-msg` hook (see
+[`prek.toml`](../prek.toml)) that rejects messages
+not following Conventional Commits. Skip it for a single commit with
+`git commit --no-verify`.
+
+Dependabot cannot update the pinned hook revisions: its `pre-commit`
+ecosystem only reads `.pre-commit-config.yaml`, and support for `prek.toml`
+is not shipped yet ([dependabot-core#14624](https://github.com/dependabot/dependabot-core/issues/14624)).
+Run this instead to bump the `rev` pins in `prek.toml`:
+
+```sh
+uv run prek update        # update pinned hook revisions
+uv run prek update --check # dry run: exit 1 if updates are available (usable in CI)
+```
+
 ## Commit messages
 
 Commit messages must follow [Conventional Commits](https://www.conventionalcommits.org/).
 Pull requests with non-conforming commit messages will not be accepted.
+The `commit-msg` hook checks this automatically.
 
 ```
 <type>(<optional scope>): <short imperative description>

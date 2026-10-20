@@ -78,8 +78,7 @@ class Tracker:
 
     @property
     def last_event(self) -> Event | None:
-        events = self.storage.events()
-        return events[-1] if events else None
+        return self.storage.last_event()
 
     def state(self) -> str:
         last = self.last_event

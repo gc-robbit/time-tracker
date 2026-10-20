@@ -44,6 +44,7 @@ class Storage:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._conn = sqlite3.connect(self.path)
         self._conn.row_factory = sqlite3.Row
+        self._events_cache: list[Event] | None = None
         self._init_schema()
 
     def _init_schema(self) -> None:
@@ -82,23 +83,45 @@ class Storage:
                 "INSERT INTO events (event_type, ts, project) VALUES (?, ?, ?)",
                 (event_type, utc_ts.isoformat(), project),
             )
+        self._events_cache = None
         return Event(
             id=cursor.lastrowid, event_type=event_type, ts=utc_ts, project=project
         )
 
     def events(self) -> list[Event]:
-        rows = self._conn.execute(
-            "SELECT id, event_type, ts, project FROM events ORDER BY id"
-        ).fetchall()
-        return [
-            Event(
-                id=row["id"],
-                event_type=row["event_type"],
-                ts=datetime.fromisoformat(row["ts"]),
-                project=row["project"],
-            )
-            for row in rows
-        ]
+        """All events in order, read once per Storage instance.
+
+        The parsed log is cached in memory; add_event() invalidates it.
+        Returns a copy so callers cannot mutate the cache.
+        """
+        if self._events_cache is None:
+            rows = self._conn.execute(
+                "SELECT id, event_type, ts, project FROM events ORDER BY id"
+            ).fetchall()
+            self._events_cache = [
+                Event(
+                    id=row["id"],
+                    event_type=row["event_type"],
+                    ts=datetime.fromisoformat(row["ts"]),
+                    project=row["project"],
+                )
+                for row in rows
+            ]
+        return list(self._events_cache)
+
+    def last_event(self) -> Event | None:
+        """The most recent event, or None when no events exist."""
+        row = self._conn.execute(
+            "SELECT id, event_type, ts, project FROM events ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        if row is None:
+            return None
+        return Event(
+            id=row["id"],
+            event_type=row["event_type"],
+            ts=datetime.fromisoformat(row["ts"]),
+            project=row["project"],
+        )
 
     def get_setting(self, key: str) -> str | None:
         row = self._conn.execute(

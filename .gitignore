@@ -2,11 +2,14 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
-dist/
 build/
 
 # uv / virtual environments
 .venv/
+
+# Committed single-file distribution lives here; ignore other build output
+dist/*
+!dist/time-tracker
 
 # Tooling
 .pytest_cache/

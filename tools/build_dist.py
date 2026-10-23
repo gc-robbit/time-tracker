@@ -131,6 +131,14 @@ def build() -> str:
     return HEADER + "\n" + imports_block + "\n\n" + "\n\n".join(sections) + ENTRY_POINT
 
 
+def _display(path: Path) -> str:
+    """Render a path relative to the repository when possible."""
+    try:
+        return str(path.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -138,25 +146,33 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="verify the distribution is up to date without writing it",
     )
+    parser.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        default=OUTPUT,
+        help=f"write the distribution here (default: {_display(OUTPUT)})",
+    )
     args = parser.parse_args(argv)
     content = build()
-    relative = OUTPUT.relative_to(REPO_ROOT)
+    output: Path = args.output
+    shown = _display(output)
 
     if args.check:
-        current = OUTPUT.read_text() if OUTPUT.exists() else None
+        current = output.read_text() if output.exists() else None
         if current == content:
-            print(f"{relative} is up to date")
+            print(f"{shown} is up to date")
             return 0
         print(
-            f"{relative} is out of date — regenerate with 'uv run tools/build_dist.py'",
+            f"{shown} is out of date — regenerate with 'uv run tools/build_dist.py'",
             file=sys.stderr,
         )
         return 1
 
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT.write_text(content)
-    os.chmod(OUTPUT, 0o755)
-    print(f"Wrote {relative} ({len(content.splitlines())} lines)")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(content)
+    os.chmod(output, 0o755)
+    print(f"Wrote {shown} ({len(content.splitlines())} lines)")
     return 0
 
 

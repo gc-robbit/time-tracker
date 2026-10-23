@@ -18,7 +18,7 @@ import sqlite3
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
 # ------------------------------------------------------------------------
@@ -28,6 +28,10 @@ from pathlib import Path
 
 _DURATION_RE = re.compile(
     r"^(?:(?P<hours>\d+(?:\.\d+)?)h)?(?:(?P<minutes>\d+)m?)?$",
+)
+
+_TIME_RE = re.compile(
+    r"^(?P<hours>\d{1,2}):(?P<minutes>\d{2})(?::(?P<seconds>\d{2}))?$",
 )
 
 
@@ -62,6 +66,20 @@ def parse_duration(text: str) -> timedelta:
     if minutes > 59:
         raise ValueError(f"invalid duration {text!r} (minutes must be 0-59)")
     return timedelta(hours=float(match["hours"] or 0), minutes=minutes)
+
+
+def parse_time_of_day(text: str) -> time:
+    """Parse a local time such as '9:30', '09:30' or '09:30:15'."""
+    text = text.strip()
+    match = _TIME_RE.match(text)
+    if not match:
+        raise ValueError(f"invalid time {text!r} (expected e.g. 9:30 or 09:30:15)")
+    hours = int(match["hours"])
+    minutes = int(match["minutes"])
+    seconds = int(match["seconds"] or 0)
+    if hours > 23 or minutes > 59 or seconds > 59:
+        raise ValueError(f"invalid time {text!r} (expected e.g. 9:30 or 09:30:15)")
+    return time(hours, minutes, seconds)
 
 
 def format_duration(delta: timedelta) -> str:
@@ -335,7 +353,7 @@ class Tracker:
 
     # -- state transitions -------------------------------------------------
 
-    def start(self, project: str) -> Event:
+    def start(self, project: str, at: datetime | None = None) -> Event:
         state = self.state()
         if state == STATE_RUNNING:
             raise InvalidTransitionError(
@@ -349,7 +367,18 @@ class Tracker:
         project = project.strip()
         if not project:
             raise ValueError("project name must not be empty")
-        return self.storage.add_event("start", self.now(), project=project)
+        now = self.now()
+        moment = at if at is not None else now
+        if moment.tzinfo is None:
+            raise ValueError("start time must be timezone-aware")
+        if moment > now:
+            raise ValueError("start time must not be in the future")
+        last = self.last_event
+        if last is not None and moment < last.ts:
+            raise ValueError(
+                "start time must not be earlier than the last recorded event"
+            )
+        return self.storage.add_event("start", moment, project=project)
 
     def pause(self) -> Event:
         state = self.state()
@@ -530,6 +559,11 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="?",
         help="project to track time against (falls back to the configured default)",
     )
+    start.add_argument(
+        "--at",
+        metavar="HH:MM",
+        help="start at this local time today instead of now (e.g. 09:30)",
+    )
     subparsers.add_parser(
         "pause",
         aliases=["lunch", "out"],
@@ -679,6 +713,15 @@ def _run_config(args: argparse.Namespace, tracker: Tracker) -> None:
     print(f"Default project set to '{project}'.")
 
 
+def _resolve_start_time(tracker: Tracker, value: str | None) -> datetime | None:
+    """Turn a local time of day into an aware datetime for today."""
+    if value is None:
+        return None
+    parsed = parse_time_of_day(value)
+    local_now = tracker.now().astimezone()
+    return datetime.combine(local_now.date(), parsed).astimezone()
+
+
 def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
     command = args.command or "status"
     if command == "start":
@@ -689,7 +732,7 @@ def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
                 "(use 'time-tracker start <project>' or set one with "
                 "'time-tracker config default_project <name>')"
             )
-        event = tracker.start(project)
+        event = tracker.start(project, _resolve_start_time(tracker, args.at))
         print(
             f"Started '{project}' at {_clock(event.ts)}. "
             "Run 'time-tracker stop' when you're done."

@@ -86,6 +86,19 @@ def test_report_after_tracking(capsys) -> None:
     assert "Balance" in out
 
 
+def test_start_at_specific_time(capsys) -> None:
+    assert main(["start", "web", "--at", "00:00"]) == 0
+    out = capsys.readouterr().out
+    assert "Started 'web' at 00:00:00" in out
+
+    assert main(["stop"]) == 0
+
+
+def test_start_at_invalid_time_fails(capsys) -> None:
+    assert main(["start", "web", "--at", "25:00"]) == 1
+    assert "invalid time" in capsys.readouterr().err
+
+
 def test_start_without_project_fails(capsys) -> None:
     assert main(["start"]) == 1
     err = capsys.readouterr().err

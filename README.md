@@ -23,8 +23,10 @@ time-tracker pause            # pause the running session (aliases: lunch, out)
 time-tracker continue         # resume a paused session (aliases: resume, back)
 time-tracker stop             # end the current session and show its totals
 time-tracker status           # current state + today's delta (default command)
-time-tracker report           # worked time per project + global flex history
+time-tracker report           # global flex history
+time-tracker report --all     # also break worked time down per project
 time-tracker report web       # worked time for one project only
+time-tracker report --start 2026-10-01 --end 2026-10-15  # limit the range
 time-tracker log 2026-10-20 7h30m        # record a past day after the fact
 time-tracker log yesterday 7h30m web     # ... attributed to a project
 time-tracker log 2026-10-20 8h --replace # override everything for that day
@@ -58,9 +60,12 @@ Flex   : +1:30 overall
 - **Initial flex buffer** — an optional starting balance added to Flex, set with
   `config flex_buffer` (positive or negative, e.g. `10h` or `-2h30m`). It is
   useful for carrying flex in from before you started using the tracker.
-- **Report** — worked time broken down per project and day; the trailing
-  `Flex (global)` section keeps the daily delta/balance history, starting from
-  the initial buffer.
+- **Report** — shows the global daily delta/balance history, starting from the
+  initial buffer. Pass `--all` to also break worked time down per project, or
+  name a project to report on just that one. `--start DATE` and `--end DATE`
+  limit any report to an inclusive date range (accepting `YYYY-MM-DD`, `today`
+  or `yesterday`); the flex balance carried into the range is shown as the
+  starting balance.
 
 ## Recording a past day
 

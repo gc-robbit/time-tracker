@@ -7,9 +7,8 @@ build/
 # uv / virtual environments
 .venv/
 
-# Committed single-file distribution lives here; ignore other build output
-dist/*
-!dist/time-tracker
+# Build output (the single-file distribution; see tools/build_dist.py)
+dist/
 
 # Tooling
 .pytest_cache/

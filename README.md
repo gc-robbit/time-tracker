@@ -7,9 +7,13 @@ cumulative flex balance.
 
 ## Usage
 
-The examples below assume `time-tracker` is available on your `PATH` (the
-repo ships a ready-to-run single-file copy as `dist/time-tracker` — see
-[CONTRIBUTING.md](.github/CONTRIBUTING.md)).
+The examples below assume `time-tracker` is available on your `PATH`. Grab the
+single-file distribution from the [releases
+page](https://github.com/gc-robbit/time-tracker/releases) (`chmod +x
+time-tracker` after downloading) and put it anywhere on your `PATH` — it is a
+self-contained [uv script](https://docs.astral.sh/uv/guides/scripts/) that needs
+no clone or install. See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for how it
+is built.
 
 ```sh
 time-tracker start web        # begin tracking on a project

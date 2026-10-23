@@ -238,6 +238,17 @@ class Tracker:
             return DEFAULT_WORKDAY
         return timedelta(minutes=minutes) if minutes > 0 else DEFAULT_WORKDAY
 
+    def flex_buffer(self) -> timedelta:
+        """The configured initial flex balance (default zero)."""
+        raw = self.storage.get_setting("flex_buffer_minutes")
+        if raw is None:
+            return ZERO
+        try:
+            minutes = int(raw)
+        except ValueError:
+            return ZERO
+        return timedelta(minutes=minutes)
+
     def day_summaries(self, end: datetime | None = None) -> list[DaySummary]:
         target = self.target()
         worked_by_day: dict[date, timedelta] = {}
@@ -282,5 +293,7 @@ class Tracker:
         }
 
     def flex_balance(self, end: datetime | None = None) -> timedelta:
-        """Cumulative flex balance: sum of daily (worked - target) deltas."""
-        return sum((summary.delta for summary in self.day_summaries(end)), ZERO)
+        """Cumulative flex balance: the initial buffer plus daily deltas."""
+        return self.flex_buffer() + sum(
+            (summary.delta for summary in self.day_summaries(end)), ZERO
+        )

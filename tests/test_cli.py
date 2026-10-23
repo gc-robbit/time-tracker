@@ -150,6 +150,7 @@ def test_config_show_includes_default_project(capsys) -> None:
     assert main(["config"]) == 0
     out = capsys.readouterr().out
     assert "8h" in out
+    assert "Initial flex buffer: +0:00" in out
     assert "(not set)" in out
 
     assert main(["config", "default_project", "web"]) == 0
@@ -177,6 +178,41 @@ def test_config_show_and_set(capsys) -> None:
 def test_config_invalid_duration(capsys) -> None:
     assert main(["config", "workday", "banana"]) == 1
     assert "invalid duration" in capsys.readouterr().err
+
+
+def test_config_flex_buffer(capsys) -> None:
+    assert main(["config", "flex_buffer", "1h30m"]) == 0
+    assert "Initial flex buffer set to +1:30." in capsys.readouterr().out
+
+    assert main(["config"]) == 0
+    assert "Initial flex buffer: +1:30" in capsys.readouterr().out
+
+    assert main(["config", "flex_buffer", "-2h"]) == 0
+    assert "Initial flex buffer set to -2:00." in capsys.readouterr().out
+
+    assert main(["config"]) == 0
+    assert "Initial flex buffer: -2:00" in capsys.readouterr().out
+
+
+def test_config_invalid_flex_buffer(capsys) -> None:
+    assert main(["config", "flex_buffer", "banana"]) == 1
+    assert "invalid duration" in capsys.readouterr().err
+
+
+def test_flex_buffer_in_status_and_report(capsys) -> None:
+    assert main(["config", "flex_buffer", "2h"]) == 0
+    capsys.readouterr()
+
+    assert main(["status"]) == 0
+    assert "Flex   : +2:00 overall" in capsys.readouterr().out
+
+    assert main(["start", "web"]) == 0
+    assert main(["stop"]) == 0
+    capsys.readouterr()
+
+    assert main(["report"]) == 0
+    out = capsys.readouterr().out
+    assert "Starting balance: +2:00" in out
 
 
 def test_config_missing_value(capsys) -> None:

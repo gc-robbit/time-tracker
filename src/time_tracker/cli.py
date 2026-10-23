@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sqlite3
 import sys
 from datetime import datetime, timedelta
@@ -13,6 +14,7 @@ from .durations import (
     format_hours,
     format_signed,
     parse_duration,
+    parse_signed_duration,
     parse_time_of_day,
 )
 from .storage import Storage, default_db_path
@@ -53,10 +55,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     report.add_argument("project", nargs="?", help="only report on this project")
     config = subparsers.add_parser("config", help="show or set configuration")
+    # Let signed durations such as '-2h' through as a positional value instead
+    # of argparse treating them as unknown options.
+    config._negative_number_matcher = re.compile(r"^-\d")
     config.add_argument(
         "name",
         nargs="?",
-        choices=["workday", "default_project"],
+        choices=["workday", "default_project", "flex_buffer"],
         help="setting to change",
     )
     config.add_argument("value", nargs="?", help="new value, e.g. 8h or 6h30m")
@@ -122,8 +127,10 @@ def _print_project_days(days: list[ProjectDay]) -> None:
 
 def _print_flex_section(tracker: Tracker) -> None:
     print("Flex (global):")
+    balance = tracker.flex_buffer()
+    if balance:
+        print(f"Starting balance: {format_signed(balance)}")
     rows = []
-    balance = timedelta(0)
     for summary in tracker.day_summaries():
         balance += summary.delta
         rows.append(
@@ -166,6 +173,7 @@ def _print_report(tracker: Tracker, project: str | None = None) -> None:
 def _run_config(args: argparse.Namespace, tracker: Tracker) -> None:
     if args.name is None:
         print(f"Workday target: {format_hours(tracker.target())}")
+        print(f"Initial flex buffer: {format_signed(tracker.flex_buffer())}")
         default = tracker.default_project
         print(f"Default project: {default if default else '(not set)'}")
         return
@@ -177,6 +185,13 @@ def _run_config(args: argparse.Namespace, tracker: Tracker) -> None:
             raise ValueError("workday target must be longer than zero")
         tracker.storage.set_setting("workday_minutes", str(minutes))
         print(f"Workday target set to {format_hours(timedelta(minutes=minutes))}.")
+        return
+    if args.name == "flex_buffer":
+        minutes = int(parse_signed_duration(args.value).total_seconds() // 60)
+        tracker.storage.set_setting("flex_buffer_minutes", str(minutes))
+        print(
+            f"Initial flex buffer set to {format_signed(timedelta(minutes=minutes))}."
+        )
         return
     project = args.value.strip()
     if not project:

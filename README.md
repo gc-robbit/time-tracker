@@ -14,6 +14,7 @@ repo ships a ready-to-run single-file copy as `dist/time-tracker` — see
 ```sh
 time-tracker start web        # begin tracking on a project
 time-tracker start            # falls back to the default project
+time-tracker start web --at 09:00   # begin at a specific local time today
 time-tracker pause            # pause the running session (aliases: lunch, out)
 time-tracker continue         # resume a paused session (aliases: resume, back)
 time-tracker stop             # end the current session and show its totals
@@ -29,6 +30,10 @@ A project is **required** to start: pass one on the command line or configure
 a default with `config default_project <name>` — starting with neither fails
 with an error. Project names are created implicitly on first use (quote names
 containing spaces). Durations accept `8`, `8h`, `6h30m`, `8:30` or `45m`.
+
+By default `start` uses the current time. Use `--at HH:MM` (or
+`--at HH:MM:SS`) to backdate the start to a local time today; the time must
+not be in the future or earlier than the last recorded event.
 
 `status` shows a live view, e.g.:
 

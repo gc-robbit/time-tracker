@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import re
-from datetime import timedelta
+from datetime import time, timedelta
 
 _DURATION_RE = re.compile(
     r"^(?:(?P<hours>\d+(?:\.\d+)?)h)?(?:(?P<minutes>\d+)m?)?$",
+)
+
+_TIME_RE = re.compile(
+    r"^(?P<hours>\d{1,2}):(?P<minutes>\d{2})(?::(?P<seconds>\d{2}))?$",
 )
 
 
@@ -41,6 +45,20 @@ def parse_duration(text: str) -> timedelta:
     if minutes > 59:
         raise ValueError(f"invalid duration {text!r} (minutes must be 0-59)")
     return timedelta(hours=float(match["hours"] or 0), minutes=minutes)
+
+
+def parse_time_of_day(text: str) -> time:
+    """Parse a local time such as '9:30', '09:30' or '09:30:15'."""
+    text = text.strip()
+    match = _TIME_RE.match(text)
+    if not match:
+        raise ValueError(f"invalid time {text!r} (expected e.g. 9:30 or 09:30:15)")
+    hours = int(match["hours"])
+    minutes = int(match["minutes"])
+    seconds = int(match["seconds"] or 0)
+    if hours > 23 or minutes > 59 or seconds > 59:
+        raise ValueError(f"invalid time {text!r} (expected e.g. 9:30 or 09:30:15)")
+    return time(hours, minutes, seconds)
 
 
 def format_duration(delta: timedelta) -> str:

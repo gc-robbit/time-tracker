@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import time, timedelta
 
 import pytest
 
@@ -8,6 +8,7 @@ from time_tracker.durations import (
     format_hours,
     format_signed,
     parse_duration,
+    parse_time_of_day,
 )
 
 
@@ -32,6 +33,29 @@ def test_parse_duration(text: str, expected: timedelta) -> None:
 def test_parse_duration_invalid(text: str) -> None:
     with pytest.raises(ValueError):
         parse_duration(text)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("9:30", time(9, 30)),
+        ("09:30", time(9, 30)),
+        ("09:30:15", time(9, 30, 15)),
+        ("0:00", time(0, 0)),
+        ("23:59", time(23, 59)),
+        (" 9:05 ", time(9, 5)),
+    ],
+)
+def test_parse_time_of_day(text: str, expected: time) -> None:
+    assert parse_time_of_day(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text", ["", "abc", "9", "9:5", "24:00", "9:60", "9:30:60", "-1:00"]
+)
+def test_parse_time_of_day_invalid(text: str) -> None:
+    with pytest.raises(ValueError):
+        parse_time_of_day(text)
 
 
 @pytest.mark.parametrize(

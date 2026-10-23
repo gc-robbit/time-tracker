@@ -13,6 +13,7 @@ from .durations import (
     format_hours,
     format_signed,
     parse_duration,
+    parse_time_of_day,
 )
 from .storage import Storage, default_db_path
 from .tracker import InvalidTransitionError, ProjectDay, Tracker
@@ -29,6 +30,11 @@ def build_parser() -> argparse.ArgumentParser:
         "project",
         nargs="?",
         help="project to track time against (falls back to the configured default)",
+    )
+    start.add_argument(
+        "--at",
+        metavar="HH:MM",
+        help="start at this local time today instead of now (e.g. 09:30)",
     )
     subparsers.add_parser(
         "pause",
@@ -179,6 +185,15 @@ def _run_config(args: argparse.Namespace, tracker: Tracker) -> None:
     print(f"Default project set to '{project}'.")
 
 
+def _resolve_start_time(tracker: Tracker, value: str | None) -> datetime | None:
+    """Turn a local time of day into an aware datetime for today."""
+    if value is None:
+        return None
+    parsed = parse_time_of_day(value)
+    local_now = tracker.now().astimezone()
+    return datetime.combine(local_now.date(), parsed).astimezone()
+
+
 def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
     command = args.command or "status"
     if command == "start":
@@ -189,7 +204,7 @@ def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
                 "(use 'time-tracker start <project>' or set one with "
                 "'time-tracker config default_project <name>')"
             )
-        event = tracker.start(project)
+        event = tracker.start(project, _resolve_start_time(tracker, args.at))
         print(
             f"Started '{project}' at {_clock(event.ts)}. "
             "Run 'time-tracker stop' when you're done."

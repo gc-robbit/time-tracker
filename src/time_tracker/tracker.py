@@ -97,7 +97,7 @@ class Tracker:
 
     # -- state transitions -------------------------------------------------
 
-    def start(self, project: str) -> Event:
+    def start(self, project: str, at: datetime | None = None) -> Event:
         state = self.state()
         if state == STATE_RUNNING:
             raise InvalidTransitionError(
@@ -111,7 +111,18 @@ class Tracker:
         project = project.strip()
         if not project:
             raise ValueError("project name must not be empty")
-        return self.storage.add_event("start", self.now(), project=project)
+        now = self.now()
+        moment = at if at is not None else now
+        if moment.tzinfo is None:
+            raise ValueError("start time must be timezone-aware")
+        if moment > now:
+            raise ValueError("start time must not be in the future")
+        last = self.last_event
+        if last is not None and moment < last.ts:
+            raise ValueError(
+                "start time must not be earlier than the last recorded event"
+            )
+        return self.storage.add_event("start", moment, project=project)
 
     def pause(self) -> Event:
         state = self.state()

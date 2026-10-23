@@ -56,6 +56,52 @@ def test_start_twice_raises(tracker: Tracker) -> None:
         tracker.start("web")
 
 
+def test_start_at_backdates_the_session(tracker: Tracker, clock: FakeClock) -> None:
+    started = clock.current - timedelta(hours=2)
+    event = tracker.start("web", at=started)
+
+    assert event.ts == started
+    assert tracker.active_since() == started
+    session = tracker.current_session()
+    assert session is not None
+    assert session.worked == timedelta(hours=2)
+
+
+def test_start_at_rejects_a_future_time(tracker: Tracker, clock: FakeClock) -> None:
+    with pytest.raises(ValueError, match="future"):
+        tracker.start("web", at=clock.current + timedelta(minutes=1))
+
+
+def test_start_at_rejects_a_naive_time(tracker: Tracker, clock: FakeClock) -> None:
+    with pytest.raises(ValueError, match="timezone-aware"):
+        tracker.start("web", at=clock.current.replace(tzinfo=None))
+
+
+def test_start_at_rejects_overlapping_previous_session(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    tracker.start("web")
+    clock.advance(hours=2)
+    tracker.stop()
+    with pytest.raises(ValueError, match="earlier than the last recorded event"):
+        tracker.start("web", at=clock.current - timedelta(hours=1))
+
+
+def test_start_at_after_previous_stop_is_allowed(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    tracker.start("web")
+    clock.advance(hours=1)
+    tracker.stop()
+    clock.advance(hours=2)
+    tracker.start("web", at=clock.current - timedelta(hours=1))
+
+    session = tracker.current_session()
+    assert session is not None
+    assert session.worked == timedelta(hours=1)
+    assert tracker.today_summary().worked == timedelta(hours=2)
+
+
 def test_start_while_paused_raises(tracker: Tracker) -> None:
     tracker.start("web")
     tracker.pause()

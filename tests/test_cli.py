@@ -87,7 +87,7 @@ def test_report_after_tracking(capsys) -> None:
     capsys.readouterr()
     assert main(["report"]) == 0
     out = capsys.readouterr().out
-    assert "Project: web" in out
+    assert "Project: web" not in out
     assert "Flex (global):" in out
     assert "Balance" in out
 
@@ -147,6 +147,12 @@ def test_report_per_project(capsys) -> None:
     assert "No time tracked for project 'nope'" in capsys.readouterr().out
 
     assert main(["report"]) == 0
+    out = capsys.readouterr().out
+    assert "Project: web" not in out
+    assert "Project: design" not in out
+    assert "Flex (global):" in out
+
+    assert main(["report", "--all"]) == 0
     out = capsys.readouterr().out
     assert "Project: web" in out
     assert "Project: design" in out
@@ -236,9 +242,13 @@ def test_log_manual_day_and_report(capsys) -> None:
     assert main(["log", day, "30m", "web"]) == 0
     assert "day total 8:00" in capsys.readouterr().out
 
-    assert main(["report"]) == 0
+    assert main(["report", "--all"]) == 0
     out = capsys.readouterr().out
     assert "Project: web" in out
+    assert day in out
+    assert "8:00" in out
+    assert main(["report"]) == 0
+    out = capsys.readouterr().out
     assert day in out
     assert "8:00" in out
 
@@ -270,7 +280,7 @@ def test_log_replace_overrides_the_day(capsys) -> None:
     assert f"Replaced all time on {day} with 7:00 for 'design'" in out
     assert "day total 7:00" in out
 
-    assert main(["report"]) == 0
+    assert main(["report", "--all"]) == 0
     out = capsys.readouterr().out
     assert "Project: design" in out
     assert "Project: web" not in out

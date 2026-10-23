@@ -101,7 +101,23 @@ uv run tools/build_dist.py          # write dist/time-tracker
 uv run tools/build_dist.py --check  # verify an existing file is up to date
 ```
 
-Releases are published manually from the **Release** workflow
-(`workflow_dispatch`), which builds the file and attaches it to a GitHub
-release. Downloaded assets do not keep the executable bit, so run
+Downloaded release assets do not keep the executable bit, so run
 `chmod +x time-tracker` once after downloading.
+
+## Releases
+
+Releases are cut manually from the **Release** workflow (`workflow_dispatch`).
+It runs [`cz bump`](https://commitizen-tools.github.io/commitizen/), which
+derives the next version from the Conventional Commits since the last tag,
+updates `pyproject.toml` and `uv.lock`, regenerates `CHANGELOG.md`, and commits
+and tags the bump. The workflow then builds `dist/time-tracker` and attaches it
+to a GitHub release.
+
+Versioning follows the commit types: `fix` → patch, `feat` → minor, and
+breaking changes → major (minor while the project is below 1.0.0). A run with
+no bump-eligible commits fails instead of releasing anything.
+
+The workflow authenticates with the `RELEASE_TOKEN` repository secret — a
+fine-grained personal access token with **Contents: read and write**. A PAT is
+required because `GITHUB_TOKEN` cannot bypass the `main` ruleset that requires
+pull requests.

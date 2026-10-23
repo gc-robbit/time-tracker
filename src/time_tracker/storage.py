@@ -6,7 +6,7 @@ import os
 import sqlite3
 import sys
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 EVENT_TYPES = ("start", "pause", "resume", "stop")
@@ -38,6 +38,15 @@ class Event:
     project: str | None = None
 
 
+@dataclass(frozen=True)
+class ManualEntry:
+    id: int
+    day: date
+    minutes: int
+    project: str | None = None
+    replaces: bool = False
+
+
 class Storage:
     def __init__(self, path: Path | str | None = None) -> None:
         self.path = Path(path) if path is not None else default_db_path()
@@ -45,6 +54,7 @@ class Storage:
         self._conn = sqlite3.connect(self.path)
         self._conn.row_factory = sqlite3.Row
         self._events_cache: list[Event] | None = None
+        self._manual_cache: list[ManualEntry] | None = None
         self._init_schema()
 
     def _init_schema(self) -> None:
@@ -62,6 +72,16 @@ class Storage:
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS manual_entries (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    day TEXT NOT NULL,
+                    minutes INTEGER NOT NULL CHECK (minutes > 0),
+                    project TEXT,
+                    replaces INTEGER NOT NULL DEFAULT 0
+                        CHECK (replaces IN (0, 1))
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS manual_entries_one_override
+                    ON manual_entries (day) WHERE replaces = 1;
                 """
             )
             columns = {
@@ -108,6 +128,60 @@ class Storage:
                 for row in rows
             ]
         return list(self._events_cache)
+
+    def add_manual_entry(
+        self,
+        day: date,
+        minutes: int,
+        project: str | None = None,
+        *,
+        replaces: bool = False,
+    ) -> ManualEntry:
+        """Record worked minutes for a local day.
+
+        Additive entries stack on top of tracked time; an entry with
+        ``replaces`` makes that day's total authoritative and discards any
+        earlier manual entries for the day.
+        """
+        if minutes <= 0:
+            raise ValueError("manual time must be longer than zero")
+        with self._conn:
+            if replaces:
+                self._conn.execute(
+                    "DELETE FROM manual_entries WHERE day = ?", (day.isoformat(),)
+                )
+            cursor = self._conn.execute(
+                "INSERT INTO manual_entries (day, minutes, project, replaces) "
+                "VALUES (?, ?, ?, ?)",
+                (day.isoformat(), minutes, project, int(replaces)),
+            )
+        self._manual_cache = None
+        return ManualEntry(
+            id=cursor.lastrowid,
+            day=day,
+            minutes=minutes,
+            project=project,
+            replaces=replaces,
+        )
+
+    def manual_entries(self) -> list[ManualEntry]:
+        """All manual day entries, sorted by day and insertion order."""
+        if self._manual_cache is None:
+            rows = self._conn.execute(
+                "SELECT id, day, minutes, project, replaces "
+                "FROM manual_entries ORDER BY day, id"
+            ).fetchall()
+            self._manual_cache = [
+                ManualEntry(
+                    id=row["id"],
+                    day=date.fromisoformat(row["day"]),
+                    minutes=row["minutes"],
+                    project=row["project"],
+                    replaces=bool(row["replaces"]),
+                )
+                for row in rows
+            ]
+        return list(self._manual_cache)
 
     def last_event(self) -> Event | None:
         """The most recent event, or None when no events exist."""

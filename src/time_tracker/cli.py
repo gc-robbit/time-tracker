@@ -6,7 +6,7 @@ import argparse
 import re
 import sqlite3
 import sys
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from .durations import (
     format_clock,
@@ -37,6 +37,29 @@ def build_parser() -> argparse.ArgumentParser:
         "--at",
         metavar="HH:MM",
         help="start at this local time today instead of now (e.g. 09:30)",
+    )
+    log = subparsers.add_parser(
+        "log", help="record worked time for a past day after the fact"
+    )
+    log.add_argument(
+        "date",
+        metavar="DATE",
+        help="local date (YYYY-MM-DD, 'today' or 'yesterday')",
+    )
+    log.add_argument(
+        "duration",
+        metavar="DURATION",
+        help="worked time, e.g. 7h30m (accepts the usual duration formats)",
+    )
+    log.add_argument(
+        "project",
+        nargs="?",
+        help="project to attribute the time to (falls back to the configured default)",
+    )
+    log.add_argument(
+        "--replace",
+        action="store_true",
+        help="replace all tracked and manual time for that day",
     )
     subparsers.add_parser(
         "pause",
@@ -156,7 +179,7 @@ def _print_report(tracker: Tracker, project: str | None = None) -> None:
         _print_project_days(days)
         return
 
-    if not project_days:
+    if not project_days and not tracker.day_summaries():
         print(
             "No time tracked yet. Start a session with 'time-tracker start <project>'."
         )
@@ -166,7 +189,8 @@ def _print_report(tracker: Tracker, project: str | None = None) -> None:
             print()
         print(f"Project: {_project_label(name)}")
         _print_project_days(days)
-    print()
+    if project_days:
+        print()
     _print_flex_section(tracker)
 
 
@@ -209,6 +233,26 @@ def _resolve_start_time(tracker: Tracker, value: str | None) -> datetime | None:
     return datetime.combine(local_now.date(), parsed).astimezone()
 
 
+def _resolve_day(tracker: Tracker, value: str) -> date:
+    """Parse a past local date from ISO format or a relative alias."""
+    text = value.strip().lower()
+    today = tracker.now().astimezone().date()
+    if text == "today":
+        day = today
+    elif text == "yesterday":
+        day = today - timedelta(days=1)
+    else:
+        try:
+            day = date.fromisoformat(text)
+        except ValueError:
+            raise ValueError(
+                f"invalid date {value!r} (expected YYYY-MM-DD, 'today' or 'yesterday')"
+            ) from None
+    if day > today:
+        raise ValueError("date must not be in the future")
+    return day
+
+
 def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
     command = args.command or "status"
     if command == "start":
@@ -247,6 +291,27 @@ def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
         )
     elif command == "config":
         _run_config(args, tracker)
+    elif command == "log":
+        day = _resolve_day(tracker, args.date)
+        worked = parse_duration(args.duration)
+        project = (args.project or "").strip() or tracker.default_project
+        tracker.log_day(day, worked, project, replace=args.replace)
+        summary = next(
+            (summary for summary in tracker.day_summaries() if summary.day == day),
+            None,
+        )
+        total = format_duration(summary.worked) if summary else "0:00"
+        target = f" for '{project}'" if project else ""
+        if args.replace:
+            print(
+                f"Replaced all time on {day.isoformat()} with "
+                f"{format_duration(worked)}{target} (day total {total})."
+            )
+        else:
+            print(
+                f"Logged {format_duration(worked)}{target} on "
+                f"{day.isoformat()} (day total {total})."
+            )
     elif command == "report":
         _print_report(tracker, args.project.strip() if args.project else None)
     else:

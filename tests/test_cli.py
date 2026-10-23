@@ -1,6 +1,12 @@
+from datetime import datetime, timedelta
+
 import pytest
 
 from time_tracker.cli import main
+
+
+def _day(days_ago: int = 0) -> str:
+    return (datetime.now().astimezone().date() - timedelta(days=days_ago)).isoformat()
 
 
 @pytest.fixture(autouse=True)
@@ -218,6 +224,82 @@ def test_flex_buffer_in_status_and_report(capsys) -> None:
 def test_config_missing_value(capsys) -> None:
     assert main(["config", "workday"]) == 1
     assert "missing value" in capsys.readouterr().err
+
+
+def test_log_manual_day_and_report(capsys) -> None:
+    day = _day(1)
+    assert main(["log", day, "7h30m", "web"]) == 0
+    out = capsys.readouterr().out
+    assert f"Logged 7:30 for 'web' on {day}" in out
+    assert "day total 7:30" in out
+
+    assert main(["log", day, "30m", "web"]) == 0
+    assert "day total 8:00" in capsys.readouterr().out
+
+    assert main(["report"]) == 0
+    out = capsys.readouterr().out
+    assert "Project: web" in out
+    assert day in out
+    assert "8:00" in out
+
+
+def test_log_uses_default_project(capsys) -> None:
+    assert main(["config", "default_project", "web"]) == 0
+    capsys.readouterr()
+
+    day = _day(2)
+    assert main(["log", day, "8h"]) == 0
+    assert f"Logged 8:00 for 'web' on {day}" in capsys.readouterr().out
+
+
+def test_log_accepts_relative_dates(capsys) -> None:
+    assert main(["log", "yesterday", "8h", "web"]) == 0
+    assert _day(1) in capsys.readouterr().out
+
+    assert main(["log", "today", "1h", "web"]) == 0
+    assert _day() in capsys.readouterr().out
+
+
+def test_log_replace_overrides_the_day(capsys) -> None:
+    day = _day(3)
+    assert main(["log", day, "8h", "web"]) == 0
+    capsys.readouterr()
+
+    assert main(["log", day, "7h", "design", "--replace"]) == 0
+    out = capsys.readouterr().out
+    assert f"Replaced all time on {day} with 7:00 for 'design'" in out
+    assert "day total 7:00" in out
+
+    assert main(["report"]) == 0
+    out = capsys.readouterr().out
+    assert "Project: design" in out
+    assert "Project: web" not in out
+
+
+def test_log_without_project_only_affects_global_flex(capsys) -> None:
+    day = _day(4)
+    assert main(["log", day, "8h"]) == 0
+    capsys.readouterr()
+
+    assert main(["report"]) == 0
+    out = capsys.readouterr().out
+    assert "No time tracked yet" not in out
+    assert "Flex (global):" in out
+    assert "Project:" not in out
+
+
+def test_log_rejects_invalid_input(capsys) -> None:
+    assert main(["log", "not-a-date", "8h"]) == 1
+    assert "invalid date" in capsys.readouterr().err
+
+    assert main(["log", _day(-1), "8h"]) == 1
+    assert "future" in capsys.readouterr().err
+
+    assert main(["log", _day(), "0h"]) == 1
+    assert "at least one minute" in capsys.readouterr().err
+
+    assert main(["log", _day(), "banana"]) == 1
+    assert "invalid duration" in capsys.readouterr().err
 
 
 def test_corrupt_db_reports_clean_error(tmp_path, capsys) -> None:

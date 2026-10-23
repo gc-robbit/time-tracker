@@ -6,7 +6,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
-from .storage import Event, Storage
+from .storage import Event, ManualEntry, Storage
 
 DEFAULT_WORKDAY = timedelta(hours=8)
 ZERO = timedelta(0)
@@ -151,6 +151,36 @@ class Tracker:
             raise InvalidTransitionError("No session in progress — nothing to stop.")
         return session
 
+    def log_day(
+        self,
+        day: date,
+        worked: timedelta,
+        project: str | None = None,
+        *,
+        replace: bool = False,
+    ) -> ManualEntry:
+        """Record worked time for a local day after the fact.
+
+        Entries add to any tracked time for the day. With ``replace`` the
+        manual total becomes the whole day's total, overriding tracked time
+        and discarding earlier manual entries for that day.
+        """
+        minutes = int(worked.total_seconds() // 60)
+        if minutes <= 0:
+            raise ValueError("worked time must be at least one minute")
+        if day > self.now().astimezone().date():
+            raise ValueError("day must not be in the future")
+        name = (project or "").strip() or None
+        for entry in self.storage.manual_entries():
+            if entry.day == day and entry.replaces and not replace:
+                raise ValueError(
+                    f"{day.isoformat()} already has an overriding entry "
+                    "(use 'log ... --replace' to change it)"
+                )
+        return self.storage.add_manual_entry(
+            day, minutes, project=name, replaces=replace
+        )
+
     # -- derived data ------------------------------------------------------
 
     def current_session(self) -> Session | None:
@@ -251,40 +281,64 @@ class Tracker:
 
     def day_summaries(self, end: datetime | None = None) -> list[DaySummary]:
         target = self.target()
+        return [
+            DaySummary(day, worked, target)
+            for day, worked in sorted(self._worked_by_day(end).items())
+        ]
+
+    def _worked_by_day(self, end: datetime | None = None) -> dict[date, timedelta]:
         worked_by_day: dict[date, timedelta] = {}
         for interval in self.intervals(end):
             day = interval.start.astimezone().date()
             worked_by_day[day] = worked_by_day.get(day, ZERO) + interval.duration
-        return [
-            DaySummary(day, worked, target)
-            for day, worked in sorted(worked_by_day.items())
-        ]
+
+        entries = self.storage.manual_entries()
+        overrides = {entry.day: entry for entry in entries if entry.replaces}
+        for entry in overrides.values():
+            worked_by_day[entry.day] = timedelta(minutes=entry.minutes)
+        for entry in entries:
+            if entry.replaces or entry.day in overrides:
+                continue
+            worked_by_day[entry.day] = worked_by_day.get(entry.day, ZERO) + timedelta(
+                minutes=entry.minutes
+            )
+        return worked_by_day
 
     def today_summary(self, end: datetime | None = None) -> DaySummary:
         moment = end or self.now()
         today = moment.astimezone().date()
-        worked = sum(
-            (
-                interval.duration
-                for interval in self.intervals(end)
-                if interval.start.astimezone().date() == today
-            ),
-            ZERO,
-        )
+        worked = self._worked_by_day(end).get(today, ZERO)
         return DaySummary(today, worked, self.target())
 
     def project_days(self, end: datetime | None = None) -> dict[str, list[ProjectDay]]:
         """Worked time per project, grouped by local day and sorted by date.
 
         Intervals from sessions started before projects existed group under "".
+        Manual days without a project only affect the global flex balance.
         """
         totals: dict[str, dict[date, timedelta]] = {}
+        entries = self.storage.manual_entries()
+        overrides = {entry.day: entry for entry in entries if entry.replaces}
         for interval in self.intervals(end):
             day = interval.start.astimezone().date()
+            if day in overrides:
+                continue
             totals.setdefault(interval.project, {})
             totals[interval.project][day] = (
                 totals[interval.project].get(day, ZERO) + interval.duration
             )
+        for entry in entries:
+            if entry.replaces or entry.day in overrides or not entry.project:
+                continue
+            totals.setdefault(entry.project, {})
+            totals[entry.project][entry.day] = totals[entry.project].get(
+                entry.day, ZERO
+            ) + timedelta(minutes=entry.minutes)
+        for entry in overrides.values():
+            if not entry.project:
+                continue
+            totals.setdefault(entry.project, {})
+            totals[entry.project][entry.day] = timedelta(minutes=entry.minutes)
         return {
             project: [
                 ProjectDay(project, day, worked) for day, worked in sorted(days.items())

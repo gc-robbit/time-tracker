@@ -242,6 +242,115 @@ def test_flex_buffer_defaults_to_zero(tracker: Tracker) -> None:
     assert tracker.flex_buffer() == timedelta(0)
 
 
+def test_manual_day_contributes_to_flex_and_projects(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    day = clock.current.astimezone().date()
+    entry = tracker.log_day(day, timedelta(hours=7), "web")
+
+    assert entry.day == day
+    assert entry.minutes == 7 * 60
+    assert entry.project == "web"
+    assert tracker.today_summary().worked == timedelta(hours=7)
+    assert tracker.today_summary().delta == -timedelta(hours=1)
+    assert tracker.flex_balance() == -timedelta(hours=1)
+    assert tracker.project_days()["web"][0].worked == timedelta(hours=7)
+
+
+def test_manual_day_can_fill_in_an_untracked_day(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    day = clock.current.astimezone().date() - timedelta(days=2)
+    tracker.log_day(day, timedelta(hours=9), "web")
+
+    summaries = tracker.day_summaries()
+    assert [summary.day for summary in summaries] == [day]
+    assert summaries[0].worked == timedelta(hours=9)
+    assert summaries[0].delta == timedelta(hours=1)
+    assert tracker.flex_balance() == timedelta(hours=1)
+
+
+def test_manual_day_adds_to_tracked_time(tracker: Tracker, clock: FakeClock) -> None:
+    tracker.start("web")
+    clock.advance(hours=2)
+    tracker.stop()
+    day = clock.current.astimezone().date()
+
+    tracker.log_day(day, timedelta(hours=3), "design")
+
+    assert tracker.today_summary().worked == timedelta(hours=5)
+    project_days = tracker.project_days()
+    assert project_days["web"][0].worked == timedelta(hours=2)
+    assert project_days["design"][0].worked == timedelta(hours=3)
+
+
+def test_manual_replacement_overrides_all_time_for_the_day(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    tracker.start("web")
+    clock.advance(hours=2)
+    tracker.stop()
+    day = clock.current.astimezone().date()
+    tracker.log_day(day, timedelta(hours=3), "web")
+
+    tracker.log_day(day, timedelta(hours=6), "design", replace=True)
+
+    assert tracker.today_summary().worked == timedelta(hours=6)
+    assert tracker.flex_balance() == -timedelta(hours=2)
+    project_days = tracker.project_days()
+    assert set(project_days) == {"design"}
+    assert project_days["design"][0].worked == timedelta(hours=6)
+
+
+def test_manual_add_after_replacement_is_rejected(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    day = clock.current.astimezone().date()
+    tracker.log_day(day, timedelta(hours=8), "web", replace=True)
+
+    with pytest.raises(ValueError, match="overriding entry"):
+        tracker.log_day(day, timedelta(hours=1), "web")
+
+
+def test_manual_day_without_project_only_affects_flex(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    day = clock.current.astimezone().date()
+    tracker.log_day(day, timedelta(hours=8))
+
+    assert tracker.project_days() == {}
+    assert tracker.today_summary().worked == timedelta(hours=8)
+    assert tracker.flex_balance() == timedelta(0)
+
+
+def test_manual_replacement_without_project_hides_tracked_projects(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    tracker.start("web")
+    clock.advance(hours=2)
+    tracker.stop()
+    day = clock.current.astimezone().date()
+
+    tracker.log_day(day, timedelta(hours=8), replace=True)
+
+    assert tracker.project_days() == {}
+    assert tracker.today_summary().worked == timedelta(hours=8)
+
+
+def test_manual_day_rejects_future_dates(tracker: Tracker, clock: FakeClock) -> None:
+    day = clock.current.astimezone().date() + timedelta(days=1)
+    with pytest.raises(ValueError, match="future"):
+        tracker.log_day(day, timedelta(hours=8))
+
+
+def test_manual_day_rejects_non_positive_time(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    day = clock.current.astimezone().date()
+    with pytest.raises(ValueError, match="at least one minute"):
+        tracker.log_day(day, timedelta(0))
+
+
 def test_flex_buffer_is_added_to_the_balance(
     tracker: Tracker, clock: FakeClock
 ) -> None:

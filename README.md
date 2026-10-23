@@ -25,6 +25,9 @@ time-tracker stop             # end the current session and show its totals
 time-tracker status           # current state + today's delta (default command)
 time-tracker report           # worked time per project + global flex history
 time-tracker report web       # worked time for one project only
+time-tracker log 2026-10-20 7h30m        # record a past day after the fact
+time-tracker log yesterday 7h30m web     # ... attributed to a project
+time-tracker log 2026-10-20 8h --replace # override everything for that day
 time-tracker config           # show all settings
 time-tracker config workday 6h30m         # set the workday target
 time-tracker config flex_buffer 10h       # set an initial flex balance
@@ -59,6 +62,30 @@ Flex   : +1:30 overall
   `Flex (global)` section keeps the daily delta/balance history, starting from
   the initial buffer.
 
+## Recording a past day
+
+Use `log` to fill in a day you did not track live:
+
+```sh
+time-tracker log 2026-10-20 7h30m          # log time for that day
+time-tracker log yesterday 7h30m web       # attribute it to a project
+time-tracker log 2026-10-20 8h --replace   # make 8h the day's total
+```
+
+The date accepts `YYYY-MM-DD`, `today` or `yesterday`; future dates are
+rejected. Durations use the same formats as elsewhere (`7h30m`, `7:30`, `45m`).
+
+- Additions stack with any time tracked that day, so you can fill in the gaps
+  around partially tracked sessions.
+- `--replace` makes the given duration the authoritative total for that date.
+  It overrides tracked sessions and discards earlier manual entries for the day.
+  A day can only be replaced again with another `--replace`.
+- The project argument is optional and falls back to `default_project`. Manual
+  days with no project still count toward the global flex balance but do not
+  appear in per-project reports.
+- Manual days appear in `status`, `report` and the flex history exactly like
+  tracked days, including the daily target and delta.
+
 ## Storage
 
 Sessions are stored as an append-only event log (`start`, `pause`, `resume`,
@@ -69,8 +96,10 @@ Sessions are stored as an append-only event log (`start`, `pause`, `resume`,
 - Override with the `TIME_TRACKER_DB` environment variable.
 
 Timestamps are stored in UTC; days are grouped by local date, and an interval
-that crosses midnight counts toward the day it started. Databases created
-before projects existed are migrated automatically.
+that crosses midnight counts toward the day it started. Backfilled days live
+in a separate `manual_entries` table: additive entries merge with the event
+log, while a replacement entry takes precedence over everything for that date.
+Databases created before projects existed are migrated automatically.
 
 ## Development
 

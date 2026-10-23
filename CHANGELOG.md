@@ -1,3 +1,9 @@
+## v0.3.0 (2026-10-23)
+
+### Feat
+
+- log worked time for past days
+
 ## v0.2.0 (2026-10-23)
 
 ### Feat

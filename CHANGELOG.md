@@ -1,3 +1,13 @@
+## v0.4.0 (2026-10-23)
+
+### Feat
+
+- report by default only global; add --all and --start/--end
+
+### Fix
+
+- keep report filtering lint-clean and cover date ranges
+
 ## v0.3.0 (2026-10-23)
 
 ### Feat

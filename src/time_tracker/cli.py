@@ -74,7 +74,8 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("stop", help="stop the current session")
     subparsers.add_parser("status", help="show current status (default)")
     report = subparsers.add_parser(
-        "report", help="show worked time per project and the global flex history"
+        "report",
+        help="show the global flex history (optionally broken down per project)",
     )
     report.add_argument("project", nargs="?", help="only report on this project")
     report.add_argument(
@@ -163,29 +164,27 @@ def _print_project_days(days: list[ProjectDay]) -> None:
     print(f"Total: {format_duration(total)}")
 
 
+def _in_range(day: date, start: date | None, end: date | None) -> bool:
+    return (start is None or day >= start) and (end is None or day <= end)
+
+
 def _print_flex_section(
     tracker: Tracker, start: date | None = None, end: date | None = None
 ) -> None:
     print("Flex (global):")
     summaries = tracker.day_summaries()
     balance = tracker.flex_buffer()
-    # Compute balance up to (but not including) start
     if start is not None:
-        for s in summaries:
-            if s.day < start:
-                balance += s.delta
-            else:
-                break
+        # Carry the balance from before the requested range into it.
+        balance += sum(
+            (summary.delta for summary in summaries if summary.day < start),
+            timedelta(0),
+        )
+    if balance:
         print(f"Starting balance: {format_signed(balance)}")
-    else:
-        if balance:
-            print(f"Starting balance: {format_signed(balance)}")
-        balance = tracker.flex_buffer()
     rows = []
     for summary in summaries:
-        if start is not None and summary.day < start:
-            continue
-        if end is not None and summary.day > end:
+        if not _in_range(summary.day, start, end):
             continue
         balance += summary.delta
         rows.append(
@@ -208,55 +207,27 @@ def _print_report(
     start: date | None = None,
     end: date | None = None,
 ) -> None:
-    project_days = tracker.project_days()
-    if start is not None or end is not None:
-        # Filter project days
-        filtered_project_days = {}
-        for name, days in project_days.items():
-            fdays = []
-            for d in days:
-                if start is not None and d.day < start:
-                    continue
-                if end is not None and d.day > end:
-                    continue
-                fdays.append(d)
-            if fdays:
-                filtered_project_days[name] = fdays
-        project_days = filtered_project_days
+    project_days = {
+        name: [day for day in days if _in_range(day.day, start, end)]
+        for name, days in tracker.project_days().items()
+    }
+    project_days = {name: days for name, days in project_days.items() if days}
 
     if project is not None:
         days = project_days.get(project, [])
         if not days:
-            print(f"No time tracked for project '{project}'.")
+            suffix = " in that date range" if start or end else ""
+            print(f"No time tracked for project '{project}'{suffix}.")
             return
         print(f"Project: {_project_label(project)}")
         _print_project_days(days)
         return
 
-    all_summaries = tracker.day_summaries()
-    summaries = all_summaries
-    if start is not None or end is not None:
-        summaries_filtered = []
-        for s in all_summaries:
-            if start is not None and s.day < start:
-                continue
-            if end is not None and s.day > end:
-                continue
-            summaries_filtered.append(s)
-        summaries = summaries_filtered
-
-    # Check if there's anything at all tracked
-    if not all_summaries and not project_days:
+    summaries = tracker.day_summaries()
+    if not summaries:
         print(
             "No time tracked yet. Start a session with 'time-tracker start <project>'."
         )
-        return
-    # If filtering by range, there might be no entries in range - still show flex report?
-    # The flex report shows the range; if no days in range, maybe show empty table
-    has_in_range = bool(project_days) or bool(summaries)
-    if not has_in_range and (start is not None or end is not None):
-        # Show flex section with empty range
-        _print_flex_section(tracker, start=start, end=end)
         return
 
     if all_projects:
@@ -267,12 +238,7 @@ def _print_report(
             _print_project_days(days)
         if project_days:
             print()
-        _print_flex_section(tracker, start=start, end=end)
-        return
-    else:
-        # By default only show global report
-        _print_flex_section(tracker, start=start, end=end)
-        return
+    _print_flex_section(tracker, start=start, end=end)
 
 
 def _run_config(args: argparse.Namespace, tracker: Tracker) -> None:
@@ -394,12 +360,20 @@ def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
                 f"{day.isoformat()} (day total {total})."
             )
     elif command == "report":
-        project = args.project.strip() if args.project and args.project.strip() else None
+        project = (args.project or "").strip() or None
+        if project is not None and args.all:
+            raise ValueError("cannot combine a project with --all")
         start = _resolve_day(tracker, args.start) if args.start else None
         end = _resolve_day(tracker, args.end) if args.end else None
-        if start and end and start > end:
+        if start is not None and end is not None and start > end:
             raise ValueError("start date must not be after end date")
-        _print_report(tracker, project, all_projects=getattr(args, "all", False), start=start, end=end)
+        _print_report(
+            tracker,
+            project,
+            all_projects=args.all,
+            start=start,
+            end=end,
+        )
     else:
         _print_status(tracker)
 

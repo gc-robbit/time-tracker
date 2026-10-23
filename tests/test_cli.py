@@ -158,6 +158,39 @@ def test_report_per_project(capsys) -> None:
     assert "Project: design" in out
 
 
+def test_report_date_range(capsys) -> None:
+    older = _day(5)
+    middle = _day(4)
+    newer = _day(2)
+    assert main(["log", older, "9h", "web"]) == 0
+    assert main(["log", middle, "7h", "web"]) == 0
+    assert main(["log", newer, "6h", "design"]) == 0
+    capsys.readouterr()
+
+    assert main(["report", "--start", middle, "--end", newer]) == 0
+    out = capsys.readouterr().out
+    assert middle in out
+    assert newer in out
+    assert older not in out
+    # The balance from before the range is carried in.
+    assert "Starting balance: +1:00" in out
+
+    assert main(["report", "--all", "--end", middle]) == 0
+    out = capsys.readouterr().out
+    assert "Project: web" in out
+    assert "Project: design" not in out
+    assert older in out
+    assert newer not in out
+
+
+def test_report_rejects_conflicting_or_invalid_ranges(capsys) -> None:
+    assert main(["report", "web", "--all"]) == 1
+    assert "cannot combine" in capsys.readouterr().err
+
+    assert main(["report", "--start", _day(1), "--end", _day(3)]) == 1
+    assert "start date must not be after end date" in capsys.readouterr().err
+
+
 def test_config_show_includes_default_project(capsys) -> None:
     assert main(["config"]) == 0
     out = capsys.readouterr().out

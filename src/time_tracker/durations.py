@@ -47,6 +47,16 @@ def parse_duration(text: str) -> timedelta:
     return timedelta(hours=float(match["hours"] or 0), minutes=minutes)
 
 
+def parse_signed_duration(text: str) -> timedelta:
+    """Parse a duration with an optional leading sign ('1h30m', '+45m', '-2h')."""
+    text = text.strip()
+    sign = 1
+    if text[:1] in ("+", "-"):
+        sign = -1 if text[0] == "-" else 1
+        text = text[1:]
+    return sign * parse_duration(text)
+
+
 def parse_time_of_day(text: str) -> time:
     """Parse a local time such as '9:30', '09:30' or '09:30:15'."""
     text = text.strip()

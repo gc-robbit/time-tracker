@@ -27,6 +27,7 @@ time-tracker report           # worked time per project + global flex history
 time-tracker report web       # worked time for one project only
 time-tracker config           # show all settings
 time-tracker config workday 6h30m         # set the workday target
+time-tracker config flex_buffer 10h       # set an initial flex balance
 time-tracker config default_project web   # set the default project
 ```
 
@@ -51,8 +52,12 @@ Flex   : +1:30 overall
 - **Delta** — worked time today vs today's target, updating live while running.
 - **Flex** — cumulative balance across all tracked days (`worked − target` per
   day). Flex is **global**: it does not depend on projects.
+- **Initial flex buffer** — an optional starting balance added to Flex, set with
+  `config flex_buffer` (positive or negative, e.g. `10h` or `-2h30m`). It is
+  useful for carrying flex in from before you started using the tracker.
 - **Report** — worked time broken down per project and day; the trailing
-  `Flex (global)` section keeps the daily delta/balance history.
+  `Flex (global)` section keeps the daily delta/balance history, starting from
+  the initial buffer.
 
 ## Storage
 

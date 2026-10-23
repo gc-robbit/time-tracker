@@ -238,6 +238,32 @@ def test_default_target_when_unset(tracker: Tracker) -> None:
     assert tracker.target() == timedelta(hours=8)
 
 
+def test_flex_buffer_defaults_to_zero(tracker: Tracker) -> None:
+    assert tracker.flex_buffer() == timedelta(0)
+
+
+def test_flex_buffer_is_added_to_the_balance(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    tracker.storage.set_setting("flex_buffer_minutes", "90")  # +1h30 initial flex
+    tracker.start("web")
+    clock.advance(hours=9)  # +1h today
+
+    assert tracker.flex_buffer() == timedelta(hours=1, minutes=30)
+    assert tracker.flex_balance() == timedelta(hours=2, minutes=30)
+
+
+def test_negative_flex_buffer_is_supported(tracker: Tracker) -> None:
+    tracker.storage.set_setting("flex_buffer_minutes", "-120")
+    assert tracker.flex_buffer() == timedelta(hours=-2)
+    assert tracker.flex_balance() == timedelta(hours=-2)
+
+
+def test_invalid_flex_buffer_is_ignored(tracker: Tracker) -> None:
+    tracker.storage.set_setting("flex_buffer_minutes", "banana")
+    assert tracker.flex_buffer() == timedelta(0)
+
+
 def test_interval_crossing_midnight_belongs_to_start_day(
     tracker: Tracker, clock: FakeClock
 ) -> None:

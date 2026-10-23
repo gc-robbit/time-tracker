@@ -67,6 +67,7 @@ def _split_module(path: Path) -> tuple[str, list[ast.stmt], str]:
         ):
             continue
         imports.append(node)
+    imports.append(ast.Import([ast.alias("re", None)]))
 
     body = "".join(line for index, line in enumerate(lines) if index not in skipped)
     return docstring, imports, body.strip("\n")

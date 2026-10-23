@@ -8,6 +8,7 @@ from time_tracker.durations import (
     format_hours,
     format_signed,
     parse_duration,
+    parse_signed_duration,
     parse_time_of_day,
 )
 
@@ -33,6 +34,26 @@ def test_parse_duration(text: str, expected: timedelta) -> None:
 def test_parse_duration_invalid(text: str) -> None:
     with pytest.raises(ValueError):
         parse_duration(text)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("1h30m", timedelta(hours=1, minutes=30)),
+        ("+45m", timedelta(minutes=45)),
+        ("-2h", timedelta(hours=-2)),
+        (" -1:15 ", timedelta(hours=-1, minutes=-15)),
+        ("0", timedelta(0)),
+    ],
+)
+def test_parse_signed_duration(text: str, expected: timedelta) -> None:
+    assert parse_signed_duration(text) == expected
+
+
+@pytest.mark.parametrize("text", ["", "+", "-", "banana"])
+def test_parse_signed_duration_invalid(text: str) -> None:
+    with pytest.raises(ValueError):
+        parse_signed_duration(text)
 
 
 @pytest.mark.parametrize(

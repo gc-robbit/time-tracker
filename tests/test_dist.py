@@ -74,5 +74,9 @@ def test_dist_smoke_flow(dist: Path, tmp_path: Path) -> None:
 
     result = run("report")
     assert result.returncode == 0
+    assert "Project: web" not in result.stdout
+    assert "Flex (global):" in result.stdout
+    result = run("report", "--all")
+    assert result.returncode == 0
     assert "Project: web" in result.stdout
     assert "Flex (global):" in result.stdout

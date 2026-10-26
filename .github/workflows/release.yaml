@@ -13,7 +13,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # A job's name is fixed before its steps run, so compute the next version
+  # first and expose it to the release job through `needs`.
+  prepare:
+    name: Determine release version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+      - run: uv sync --locked
+      - name: Determine next version
+        id: next
+        run: |
+          # Exit codes 3 and 21 mean there is nothing eligible to release.
+          version="$(uv run --frozen cz --no-raise 3,21 bump --get-next)"
+          if [ -z "$version" ]; then
+            echo "Nothing to release: no bump-eligible commits since the last tag." >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
   release:
+    needs: prepare
+    name: Release ${{ needs.prepare.outputs.version }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -31,10 +59,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
       - name: Bump version and changelog
         id: bump
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           old_sha="$(git rev-parse HEAD)"
-          # Exit code 21 means there was nothing to bump.
-          uv run cz --no-raise 21 bump --yes
+          uv run --frozen cz bump "$VERSION" --yes
           if [ "$(git rev-parse HEAD)" = "$old_sha" ]; then
             echo "Nothing to release: no bump-eligible commits since the last tag." >&2
             exit 1

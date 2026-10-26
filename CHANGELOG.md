@@ -1,3 +1,14 @@
+## v0.5.0 (2026-10-26)
+
+### Feat
+
+- remember first named project as default
+
+### Fix
+
+- handle DST edge cases in start --at
+- resolve local date offset in midnight crossing test
+
 ## v0.4.0 (2026-10-23)
 
 ### Feat

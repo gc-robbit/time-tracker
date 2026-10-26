@@ -112,6 +112,31 @@ def test_start_without_project_fails(capsys) -> None:
     assert "default_project" in err
 
 
+def test_first_started_project_becomes_default(capsys) -> None:
+    assert main(["start", "web"]) == 0
+    out = capsys.readouterr().out
+    assert "Set 'web' as the default project." in out
+    assert main(["stop"]) == 0
+    capsys.readouterr()
+
+    assert main(["config"]) == 0
+    assert "Default project: web" in capsys.readouterr().out
+
+    assert main(["start"]) == 0
+    out = capsys.readouterr().out
+    assert "Started 'web' at" in out
+    assert "as the default project" not in out
+    assert main(["stop"]) == 0
+
+
+def test_failed_start_does_not_set_default(capsys) -> None:
+    assert main(["start", "web", "--at", "25:00"]) == 1
+    capsys.readouterr()
+
+    assert main(["config"]) == 0
+    assert "Default project: (not set)" in capsys.readouterr().out
+
+
 def test_default_project_is_used_when_omitted(capsys) -> None:
     assert main(["config", "default_project", "web"]) == 0
     capsys.readouterr()
@@ -128,6 +153,9 @@ def test_explicit_project_overrides_default(capsys) -> None:
     assert main(["start", "design"]) == 0
     assert "Started 'design' at" in capsys.readouterr().out
     assert main(["stop"]) == 0
+
+    assert main(["config"]) == 0
+    assert "Default project: web" in capsys.readouterr().out
 
 
 def test_report_per_project(capsys) -> None:
@@ -284,6 +312,15 @@ def test_log_manual_day_and_report(capsys) -> None:
     out = capsys.readouterr().out
     assert day in out
     assert "8:00" in out
+
+
+def test_first_logged_project_becomes_default(capsys) -> None:
+    day = _day(2)
+    assert main(["log", day, "8h", "web"]) == 0
+    assert "Set 'web' as the default project." in capsys.readouterr().out
+
+    assert main(["config"]) == 0
+    assert "Default project: web" in capsys.readouterr().out
 
 
 def test_log_uses_default_project(capsys) -> None:

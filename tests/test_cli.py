@@ -1,12 +1,40 @@
-from datetime import datetime, timedelta
+import os
+import time
+from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from time_tracker.cli import main
+from time_tracker.cli import _resolve_start_time, main
 
 
 def _day(days_ago: int = 0) -> str:
     return (datetime.now().astimezone().date() - timedelta(days=days_ago)).isoformat()
+
+
+@pytest.fixture
+def amsterdam_tz() -> Iterator[None]:
+    if not hasattr(time, "tzset"):
+        pytest.skip("changing the local timezone requires time.tzset()")
+    previous = os.environ.get("TZ")
+    os.environ["TZ"] = "Europe/Amsterdam"
+    time.tzset()
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = previous
+        time.tzset()
+
+
+class FixedClock:
+    def __init__(self, current: datetime) -> None:
+        self.current = current
+
+    def now(self) -> datetime:
+        return self.current
 
 
 @pytest.fixture(autouse=True)
@@ -98,6 +126,22 @@ def test_start_at_specific_time(capsys) -> None:
     assert "Started 'web' at 00:00:00" in out
 
     assert main(["stop"]) == 0
+
+
+def test_start_at_nonexistent_local_time_fails(amsterdam_tz) -> None:
+    clock = FixedClock(datetime(2026, 3, 29, 12, 0, tzinfo=UTC))
+
+    with pytest.raises(ValueError, match="does not exist"):
+        _resolve_start_time(clock, "02:30")
+
+
+def test_start_at_ambiguous_local_time_uses_first_occurrence(amsterdam_tz) -> None:
+    clock = FixedClock(datetime(2026, 10, 25, 12, 0, tzinfo=UTC))
+
+    resolved = _resolve_start_time(clock, "02:30")
+
+    assert resolved is not None
+    assert resolved.astimezone(UTC) == datetime(2026, 10, 25, 0, 30, tzinfo=UTC)
 
 
 def test_start_at_invalid_time_fails(capsys) -> None:

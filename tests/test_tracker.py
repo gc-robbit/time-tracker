@@ -376,8 +376,9 @@ def test_invalid_flex_buffer_is_ignored(tracker: Tracker) -> None:
 def test_interval_crossing_midnight_belongs_to_start_day(
     tracker: Tracker, clock: FakeClock
 ) -> None:
-    local_tz = datetime.now().astimezone().tzinfo
-    start_local = datetime(2026, 10, 20, 23, 0, tzinfo=local_tz)
+    # Let astimezone() resolve the local offset for that date rather than
+    # reusing today's fixed offset, which may differ across DST changes.
+    start_local = datetime(2026, 10, 20, 23, 0).astimezone()
     clock.current = start_local.astimezone(UTC)
     tracker.start("web")
     clock.advance(hours=2)  # crosses local midnight into 2026-10-21

@@ -38,8 +38,11 @@ time-tracker config default_project web   # set the default project
 
 A project is **required** to start: pass one on the command line or configure
 a default with `config default_project <name>` — starting with neither fails
-with an error. Project names are created implicitly on first use (quote names
-containing spaces). Durations accept `8`, `8h`, `6h30m`, `8:30` or `45m`.
+with an error. The first project you name (with `start` or `log`) is also
+remembered as the default when none is configured yet, so later commands can
+omit it; naming a different project afterwards leaves the default unchanged.
+Project names are created implicitly on first use (quote names containing
+spaces). Durations accept `8`, `8h`, `6h30m`, `8:30` or `45m`.
 
 By default `start` uses the current time. Use `--at HH:MM` (or
 `--at HH:MM:SS`) to backdate the start to a local time today; the time must

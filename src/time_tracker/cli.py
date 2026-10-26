@@ -271,6 +271,19 @@ def _run_config(args: argparse.Namespace, tracker: Tracker) -> None:
     print(f"Default project set to '{project}'.")
 
 
+def _resolve_project(tracker: Tracker, value: str | None) -> str | None:
+    """Use the named project, falling back to the configured default."""
+    return (value or "").strip() or tracker.default_project
+
+
+def _remember_default_project(tracker: Tracker, project: str | None) -> bool:
+    """Adopt ``project`` as the default when none is configured yet."""
+    if project is None or tracker.default_project is not None:
+        return False
+    tracker.storage.set_setting("default_project", project)
+    return True
+
+
 def _resolve_start_time(tracker: Tracker, value: str | None) -> datetime | None:
     """Turn a local time of day into an aware datetime for today."""
     if value is None:
@@ -303,7 +316,7 @@ def _resolve_day(tracker: Tracker, value: str) -> date:
 def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
     command = args.command or "status"
     if command == "start":
-        project = (args.project or "").strip() or tracker.default_project
+        project = _resolve_project(tracker, args.project)
         if not project:
             raise ValueError(
                 "no project given and no default project configured "
@@ -311,6 +324,8 @@ def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
                 "'time-tracker config default_project <name>')"
             )
         event = tracker.start(project, _resolve_start_time(tracker, args.at))
+        if _remember_default_project(tracker, project):
+            print(f"Set '{project}' as the default project.")
         print(
             f"Started '{project}' at {_clock(event.ts)}. "
             "Run 'time-tracker stop' when you're done."
@@ -341,8 +356,10 @@ def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
     elif command == "log":
         day = _resolve_day(tracker, args.date)
         worked = parse_duration(args.duration)
-        project = (args.project or "").strip() or tracker.default_project
+        project = _resolve_project(tracker, args.project)
         tracker.log_day(day, worked, project, replace=args.replace)
+        if _remember_default_project(tracker, project):
+            print(f"Set '{project}' as the default project.")
         summary = next(
             (summary for summary in tracker.day_summaries() if summary.day == day),
             None,

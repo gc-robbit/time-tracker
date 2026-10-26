@@ -46,7 +46,9 @@ spaces). Durations accept `8`, `8h`, `6h30m`, `8:30` or `45m`.
 
 By default `start` uses the current time. Use `--at HH:MM` (or
 `--at HH:MM:SS`) to backdate the start to a local time today; the time must
-not be in the future or earlier than the last recorded event.
+not be in the future or earlier than the last recorded event. Local times that
+are skipped when the clocks go forward are rejected; if a time occurs twice
+when the clocks go back, the first occurrence is used.
 
 `status` shows a live view, e.g.:
 

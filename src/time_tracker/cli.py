@@ -285,12 +285,25 @@ def _remember_default_project(tracker: Tracker, project: str | None) -> bool:
 
 
 def _resolve_start_time(tracker: Tracker, value: str | None) -> datetime | None:
-    """Turn a local time of day into an aware datetime for today."""
+    """Turn a local time of day into an aware datetime for today.
+
+    Ambiguous times (when clocks go back) resolve to their first occurrence.
+    Times skipped by a local clock change (when clocks go forward) are rejected.
+    """
     if value is None:
         return None
     parsed = parse_time_of_day(value)
     local_now = tracker.now().astimezone()
-    return datetime.combine(local_now.date(), parsed).astimezone()
+    naive = datetime.combine(local_now.date(), parsed)
+    first = naive.replace(fold=0).astimezone()
+    second = naive.replace(fold=1).astimezone()
+    # A skipped local time cannot round-trip back to the same wall clock.
+    if first.replace(tzinfo=None) != naive or second.replace(tzinfo=None) != naive:
+        raise ValueError(
+            f"local time {value!r} does not exist on "
+            f"{local_now.date().isoformat()} (local clocks skip it)"
+        )
+    return first
 
 
 def _resolve_day(tracker: Tracker, value: str) -> date:

@@ -1,3 +1,9 @@
+## v0.5.1 (2026-10-27)
+
+### Perf
+
+- skip unused project aggregation in reports
+
 ## v0.5.0 (2026-10-26)
 
 ### Feat

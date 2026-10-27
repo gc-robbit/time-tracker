@@ -207,13 +207,12 @@ def _print_report(
     start: date | None = None,
     end: date | None = None,
 ) -> None:
-    project_days = {
-        name: [day for day in days if _in_range(day.day, start, end)]
-        for name, days in tracker.project_days().items()
-    }
-    project_days = {name: days for name, days in project_days.items() if days}
-
     if project is not None:
+        project_days = {
+            name: [day for day in days if _in_range(day.day, start, end)]
+            for name, days in tracker.project_days().items()
+        }
+        project_days = {name: days for name, days in project_days.items() if days}
         days = project_days.get(project, [])
         if not days:
             suffix = " in that date range" if start or end else ""
@@ -222,6 +221,14 @@ def _print_report(
         print(f"Project: {_project_label(project)}")
         _print_project_days(days)
         return
+
+    project_days = {}
+    if all_projects:
+        project_days = {
+            name: [day for day in days if _in_range(day.day, start, end)]
+            for name, days in tracker.project_days().items()
+        }
+        project_days = {name: days for name, days in project_days.items() if days}
 
     summaries = tracker.day_summaries()
     if not summaries:

@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from time_tracker.cli import _resolve_start_time, main
+from time_tracker.tracker import Tracker
 
 
 def _day(days_ago: int = 0) -> str:
@@ -118,6 +119,16 @@ def test_report_after_tracking(capsys) -> None:
     assert "Project: web" not in out
     assert "Flex (global):" in out
     assert "Balance" in out
+
+
+def test_global_report_skips_project_aggregation(capsys, monkeypatch) -> None:
+    def fail_if_called(self) -> None:
+        raise AssertionError("global report should not aggregate project days")
+
+    monkeypatch.setattr(Tracker, "project_days", fail_if_called)
+
+    assert main(["report"]) == 0
+    assert "No time tracked yet" in capsys.readouterr().out
 
 
 def test_start_at_specific_time(capsys) -> None:

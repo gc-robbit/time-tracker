@@ -289,6 +289,14 @@ class Tracker:
         raw = raw.strip()
         return raw or None
 
+    def remember_default_project(self, project: str | None) -> bool:
+        """Adopt ``project`` as the default when none is configured yet."""
+        name = (project or "").strip()
+        if not name or self.default_project is not None:
+            return False
+        self.storage.set_setting("default_project", name)
+        return True
+
     def target(self) -> timedelta:
         """The configured workday length (default 8 hours)."""
         raw = self.storage.get_setting("workday_minutes")

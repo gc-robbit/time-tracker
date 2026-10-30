@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import time, timedelta
+from datetime import datetime, time, timedelta
 
 _DURATION_RE = re.compile(
     r"^(?:(?P<hours>\d+(?:\.\d+)?)h)?(?:(?P<minutes>\d+)m?)?$",
@@ -94,6 +94,11 @@ def format_clock(delta: timedelta) -> str:
     hours, rest = divmod(total_seconds, 3600)
     minutes, seconds = divmod(rest, 60)
     return f"{sign}{hours}:{minutes:02d}:{seconds:02d}"
+
+
+def format_wall_clock(moment: datetime) -> str:
+    """Format an aware timestamp as a local wall-clock time (HH:MM:SS)."""
+    return moment.astimezone().strftime("%H:%M:%S")
 
 
 def format_hours(delta: timedelta) -> str:

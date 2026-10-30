@@ -50,6 +50,14 @@ def test_no_args_shows_status(capsys) -> None:
     assert "idle" in out
 
 
+def test_watch_requires_an_interactive_terminal(capsys) -> None:
+    assert main(["watch"]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "interactive terminal" in captured.err
+    assert "time-tracker status" in captured.err
+
+
 def test_full_flow(capsys) -> None:
     assert main(["start", "web"]) == 0
     assert "Started 'web' at" in capsys.readouterr().out

@@ -47,6 +47,17 @@ def test_dist_has_uv_script_header(dist: Path) -> None:
     assert os.access(dist, os.X_OK), "the distribution must be executable"
 
 
+def test_dist_watch_requires_a_tty(dist: Path, tmp_path: Path) -> None:
+    env = os.environ | {"TIME_TRACKER_DB": str(tmp_path / "dist-watch.db")}
+    result = _run(
+        [sys.executable, str(dist), "watch"],
+        env=env,
+        stdin=subprocess.DEVNULL,
+    )
+    assert result.returncode == 1
+    assert "interactive terminal" in result.stderr
+
+
 def test_dist_smoke_flow(dist: Path, tmp_path: Path) -> None:
     def run(*args: str) -> subprocess.CompletedProcess[str]:
         env = os.environ | {"TIME_TRACKER_DB": str(tmp_path / "dist.db")}

@@ -80,6 +80,25 @@ def test_manual_entries_return_defensive_copies(tmp_path) -> None:
         assert [entry.minutes for entry in storage.manual_entries()] == [480]
 
 
+def test_refresh_sees_writes_from_another_connection(tmp_path) -> None:
+    path = tmp_path / "shared.db"
+    with Storage(path) as reader, Storage(path) as writer:
+        assert reader.events() == []
+        assert reader.manual_entries() == []
+
+        writer.add_event("start", TS, project="web")
+        writer.add_manual_entry(date(2026, 10, 20), 30, project="web")
+
+        # Cached reads stay stale until the view explicitly refreshes.
+        assert reader.events() == []
+        assert reader.manual_entries() == []
+
+        reader.refresh()
+
+        assert [event.event_type for event in reader.events()] == ["start"]
+        assert [entry.minutes for entry in reader.manual_entries()] == [30]
+
+
 def test_manual_entry_records_away_kind(tmp_path) -> None:
     day = date(2026, 10, 20)
     with Storage(tmp_path / "storage.db") as storage:

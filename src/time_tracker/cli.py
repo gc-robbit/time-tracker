@@ -9,16 +9,17 @@ import sys
 from datetime import date, datetime, timedelta
 
 from .durations import (
-    format_clock,
     format_duration,
     format_hours,
     format_signed,
+    format_wall_clock,
     parse_duration,
     parse_signed_duration,
     parse_time_of_day,
 )
 from .storage import Storage, default_db_path
 from .tracker import InvalidTransitionError, ProjectDay, Tracker
+from .view import run_view, status_lines
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -89,6 +90,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers.add_parser("stop", help="stop the current session")
     subparsers.add_parser("status", help="show current status (default)")
+    watch = subparsers.add_parser(
+        "watch", help="show a continuously updating status view"
+    )
+    watch.add_argument(
+        "project",
+        nargs="?",
+        help="project to start when idle (falls back to the configured default)",
+    )
     report = subparsers.add_parser(
         "report",
         help="show the global flex history (optionally broken down per project)",
@@ -123,10 +132,6 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _clock(ts: datetime) -> str:
-    return ts.astimezone().strftime("%H:%M:%S")
-
-
 def _print_table(headers: tuple[str, ...], rows: list[tuple[str, ...]]) -> None:
     all_rows = [headers, *rows]
     widths = [max(len(row[i]) for row in all_rows) for i in range(len(headers))]
@@ -145,33 +150,7 @@ def _project_label(project: str) -> str:
 
 
 def _print_status(tracker: Tracker) -> None:
-    state = tracker.state()
-    active_since = tracker.active_since()
-    session = tracker.current_session()
-    project = f", project '{session.project}'" if session and session.project else ""
-    if state == "running" and active_since is not None:
-        elapsed = tracker.now() - active_since
-        print(
-            f"Status : running{project} — started {_clock(active_since)}, "
-            f"elapsed {format_clock(elapsed)}"
-        )
-    elif state == "paused" and active_since is not None:
-        print(f"Status : paused{project} since {_clock(active_since)}")
-    else:
-        last = tracker.last_event
-        suffix = (
-            f" — last event: {last.event_type} at {_clock(last.ts)}" if last else ""
-        )
-        print(f"Status : idle{suffix}")
-
-    summary = tracker.today_summary()
-    away = f" + {format_duration(summary.away)} away" if summary.away else ""
-    print(
-        f"Today  : {format_duration(summary.worked)} worked{away} / "
-        f"{format_duration(summary.target)} target"
-    )
-    print(f"Delta  : {format_signed(summary.delta)} vs today's target")
-    print(f"Flex   : {format_signed(tracker.flex_balance())} overall")
+    print("\n".join(status_lines(tracker)))
 
 
 def _print_project_days(days: list[ProjectDay]) -> None:
@@ -301,14 +280,6 @@ def _resolve_project(tracker: Tracker, value: str | None) -> str | None:
     return (value or "").strip() or tracker.default_project
 
 
-def _remember_default_project(tracker: Tracker, project: str | None) -> bool:
-    """Adopt ``project`` as the default when none is configured yet."""
-    if project is None or tracker.default_project is not None:
-        return False
-    tracker.storage.set_setting("default_project", project)
-    return True
-
-
 def _resolve_start_time(tracker: Tracker, value: str | None) -> datetime | None:
     """Turn a local time of day into an aware datetime for today.
 
@@ -362,10 +333,10 @@ def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
                 "'time-tracker config default_project <name>')"
             )
         event = tracker.start(project, _resolve_start_time(tracker, args.at))
-        if _remember_default_project(tracker, project):
+        if tracker.remember_default_project(project):
             print(f"Set '{project}' as the default project.")
         print(
-            f"Started '{project}' at {_clock(event.ts)}. "
+            f"Started '{project}' at {format_wall_clock(event.ts)}. "
             "Run 'time-tracker stop' when you're done."
         )
     elif command in ("pause", "lunch", "out"):
@@ -374,18 +345,18 @@ def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
         worked = session.worked if session else timedelta(0)
         where = f" (project '{session.project}')" if session and session.project else ""
         print(
-            f"Paused at {_clock(event.ts)}{where}. "
+            f"Paused at {format_wall_clock(event.ts)}{where}. "
             f"Session worked so far: {format_duration(worked)}."
         )
     elif command in ("continue", "resume", "back"):
         event = tracker.resume()
-        print(f"Resumed at {_clock(event.ts)}.")
+        print(f"Resumed at {format_wall_clock(event.ts)}.")
     elif command == "stop":
         session = tracker.stop()
         wall_time = session.wall_time or timedelta(0)
         name = f" '{session.project}'" if session.project else ""
         print(
-            f"Stopped at {_clock(session.ended)}. "
+            f"Stopped at {format_wall_clock(session.ended)}. "
             f"Session{name} worked {format_duration(session.worked)} "
             f"(wall clock {format_duration(wall_time)})."
         )
@@ -410,7 +381,7 @@ def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
             duration = parse_duration(args.duration)
             project = _resolve_project(tracker, args.project)
             tracker.log_day(day, duration, project, replace=args.replace)
-            if project is not None and _remember_default_project(tracker, project):
+            if tracker.remember_default_project(project):
                 print(f"Set '{project}' as the default project.")
         summary = next(
             (summary for summary in tracker.day_summaries() if summary.day == day),
@@ -456,6 +427,8 @@ def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
             start=start,
             end=end,
         )
+    elif command == "watch":
+        run_view(tracker, (args.project or "").strip() or None)
     else:
         _print_status(tracker)
 

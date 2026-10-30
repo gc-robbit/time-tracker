@@ -11,7 +11,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MODULE_DIR = REPO_ROOT / "src" / "time_tracker"
-MODULES = ("durations", "storage", "tracker", "cli")
+MODULES = ("durations", "storage", "tracker", "view", "cli")
 OUTPUT = REPO_ROOT / "dist" / "time-tracker"
 
 HEADER = '''#!/usr/bin/env -S uv run --script

@@ -23,6 +23,8 @@ time-tracker pause            # pause the running session (aliases: lunch, out)
 time-tracker continue         # resume a paused session (aliases: resume, back)
 time-tracker stop             # end the current session and show its totals
 time-tracker status           # current state + today's delta (default command)
+time-tracker watch            # live status view with keyboard controls
+time-tracker watch web        # ... starting 'web' when idle
 time-tracker report           # global flex history
 time-tracker report --all     # also break worked time down per project
 time-tracker report web       # worked time for one project only
@@ -52,7 +54,7 @@ not be in the future or earlier than the last recorded event. Local times that
 are skipped when the clocks go forward are rejected; if a time occurs twice
 when the clocks go back, the first occurrence is used.
 
-`status` shows a live view, e.g.:
+`status` shows a one-off status snapshot, e.g.:
 
 ```
 Status : running, project 'web' — started 09:12:34, elapsed 4:10:22
@@ -74,6 +76,35 @@ Flex   : +1:30 overall
   or `yesterday`); the flex balance carried into the range is shown as the
   starting balance. The global report includes an **Away** column for
   vacation and sick leave (see [Away time](#away-time)).
+
+### Live status view
+
+Use `watch` to keep the status view running in a small shell window:
+
+```sh
+time-tracker watch          # uses the default project when starting
+time-tracker watch web      # starts 'web' when idle
+```
+
+It refreshes once per second and accepts single-key commands:
+
+| Key          | Idle  | Running     | Paused      |
+| ------------ | ----- | ----------- | ----------- |
+| `space`      | start | pause       | resume      |
+| `s`          | start | —           | —           |
+| `p`          | —     | pause       | —           |
+| `c`          | —     | —           | resume      |
+| `x`          | —     | stop        | stop        |
+| `q` / Ctrl-C | quit  | quit + stop | quit + stop |
+
+Quitting with `q` or Ctrl-C also stops the current session, if there is one.
+
+Worked time, delta and flex use minute-level formatting; only the running
+session's `elapsed` value ticks in seconds. Changes made from another shell
+(for example `time-tracker pause`) appear on the next refresh.
+
+`watch` needs an interactive terminal. Use `status` for a one-off view in
+scripts or pipes. It currently supports macOS and Linux only.
 
 ## Recording a past day
 

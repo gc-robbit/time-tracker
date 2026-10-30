@@ -52,7 +52,7 @@ class Storage:
     def __init__(self, path: Path | str | None = None) -> None:
         self.path = Path(path) if path is not None else default_db_path()
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(self.path)
+        self._conn = sqlite3.connect(self.path, timeout=5.0)
         self._conn.row_factory = sqlite3.Row
         self._events_cache: list[Event] | None = None
         self._manual_cache: list[ManualEntry] | None = None
@@ -194,6 +194,11 @@ class Storage:
                 for row in rows
             ]
         return list(self._manual_cache)
+
+    def refresh(self) -> None:
+        """Discard cached rows so writes from other processes become visible."""
+        self._events_cache = None
+        self._manual_cache = None
 
     def last_event(self) -> Event | None:
         """The most recent event, or None when no events exist."""

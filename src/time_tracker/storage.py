@@ -45,6 +45,7 @@ class ManualEntry:
     minutes: int
     project: str | None = None
     replaces: bool = False
+    kind: str | None = None
 
 
 class Storage:
@@ -78,7 +79,8 @@ class Storage:
                     minutes INTEGER NOT NULL CHECK (minutes > 0),
                     project TEXT,
                     replaces INTEGER NOT NULL DEFAULT 0
-                        CHECK (replaces IN (0, 1))
+                        CHECK (replaces IN (0, 1)),
+                    kind TEXT
                 );
                 CREATE UNIQUE INDEX IF NOT EXISTS manual_entries_one_override
                     ON manual_entries (day) WHERE replaces = 1;
@@ -89,6 +91,12 @@ class Storage:
             }
             if "project" not in columns:
                 self._conn.execute("ALTER TABLE events ADD COLUMN project TEXT")
+            columns = {
+                row["name"]
+                for row in self._conn.execute("PRAGMA table_info(manual_entries)")
+            }
+            if "kind" not in columns:
+                self._conn.execute("ALTER TABLE manual_entries ADD COLUMN kind TEXT")
 
     def add_event(
         self, event_type: str, ts: datetime, project: str | None = None
@@ -136,12 +144,14 @@ class Storage:
         project: str | None = None,
         *,
         replaces: bool = False,
+        kind: str | None = None,
     ) -> ManualEntry:
-        """Record worked minutes for a local day.
+        """Record minutes for a local day.
 
         Additive entries stack on top of tracked time; an entry with
         ``replaces`` makes that day's total authoritative and discards any
-        earlier manual entries for the day.
+        earlier manual entries for the day. A non-null ``kind`` marks away
+        time (such as vacation or sick leave) rather than worked time.
         """
         if minutes <= 0:
             raise ValueError("manual time must be longer than zero")
@@ -151,9 +161,9 @@ class Storage:
                     "DELETE FROM manual_entries WHERE day = ?", (day.isoformat(),)
                 )
             cursor = self._conn.execute(
-                "INSERT INTO manual_entries (day, minutes, project, replaces) "
-                "VALUES (?, ?, ?, ?)",
-                (day.isoformat(), minutes, project, int(replaces)),
+                "INSERT INTO manual_entries (day, minutes, project, replaces, kind) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (day.isoformat(), minutes, project, int(replaces), kind),
             )
         self._manual_cache = None
         return ManualEntry(
@@ -162,13 +172,14 @@ class Storage:
             minutes=minutes,
             project=project,
             replaces=replaces,
+            kind=kind,
         )
 
     def manual_entries(self) -> list[ManualEntry]:
         """All manual day entries, sorted by day and insertion order."""
         if self._manual_cache is None:
             rows = self._conn.execute(
-                "SELECT id, day, minutes, project, replaces "
+                "SELECT id, day, minutes, project, replaces, kind "
                 "FROM manual_entries ORDER BY day, id"
             ).fetchall()
             self._manual_cache = [
@@ -178,6 +189,7 @@ class Storage:
                     minutes=row["minutes"],
                     project=row["project"],
                     replaces=bool(row["replaces"]),
+                    kind=row["kind"],
                 )
                 for row in rows
             ]

@@ -30,6 +30,8 @@ time-tracker report --start 2026-10-01 --end 2026-10-15  # limit the range
 time-tracker log 2026-10-20 7h30m        # record a past day after the fact
 time-tracker log yesterday 7h30m web     # ... attributed to a project
 time-tracker log 2026-10-20 8h --replace # override everything for that day
+time-tracker log 2026-10-20 --vacay      # a full day of vacation
+time-tracker log yesterday --sick        # a full day of sick leave
 time-tracker config           # show all settings
 time-tracker config workday 6h30m         # set the workday target
 time-tracker config flex_buffer 10h       # set an initial flex balance
@@ -70,7 +72,8 @@ Flex   : +1:30 overall
   name a project to report on just that one. `--start DATE` and `--end DATE`
   limit any report to an inclusive date range (accepting `YYYY-MM-DD`, `today`
   or `yesterday`); the flex balance carried into the range is shown as the
-  starting balance.
+  starting balance. The global report includes an **Away** column for
+  vacation and sick leave (see [Away time](#away-time)).
 
 ## Recording a past day
 
@@ -96,6 +99,27 @@ rejected. Durations use the same formats as elsewhere (`7h30m`, `7:30`, `45m`).
 - Manual days appear in `status`, `report` and the flex history exactly like
   tracked days, including the daily target and delta.
 
+### Away time
+
+Use `--vacay` or `--sick` with `log` to record a full day of leave instead of
+work:
+
+```sh
+time-tracker log 2026-10-20 --vacay  # a full day of vacation
+time-tracker log yesterday --sick    # a full day of sick leave
+```
+
+Leave is always a full working day: omit the duration, and the configured
+workday target is recorded (so `config workday 6h30m` logs `6:30` of leave).
+Passing a duration together with `--vacay` or `--sick` is rejected.
+
+Away days appear in the global report with an **Away** column. They are
+**neutral** for flex: the day's delta is `0:00` regardless of the target or
+any time worked that day, so leave neither adds to nor subtracts from your
+balance. Away time is not attributed to a project and does not appear in
+per-project reports. `--replace` also works with leave flags, overriding any
+tracked or manual time for that day.
+
 ## Storage
 
 Sessions are stored as an append-only event log (`start`, `pause`, `resume`,
@@ -109,7 +133,8 @@ Timestamps are stored in UTC; days are grouped by local date, and an interval
 that crosses midnight counts toward the day it started. Backfilled days live
 in a separate `manual_entries` table: additive entries merge with the event
 log, while a replacement entry takes precedence over everything for that date.
-Databases created before projects existed are migrated automatically.
+An optional kind marks away time (`vacation` or `sick`) instead of worked
+time. Databases created before projects existed are migrated automatically.
 
 ## Development
 

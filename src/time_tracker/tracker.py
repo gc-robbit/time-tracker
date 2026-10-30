@@ -11,6 +11,8 @@ from .storage import Event, ManualEntry, Storage
 DEFAULT_WORKDAY = timedelta(hours=8)
 ZERO = timedelta(0)
 
+AWAY_KINDS = ("vacation", "sick")
+
 STATE_IDLE = "idle"
 STATE_RUNNING = "running"
 STATE_PAUSED = "paused"
@@ -54,9 +56,14 @@ class DaySummary:
     day: date
     worked: timedelta
     target: timedelta
+    away: timedelta = ZERO
 
     @property
     def delta(self) -> timedelta:
+        # A day with away time is neutral: the leave covers the target,
+        # regardless of how much was actually worked that day.
+        if self.away:
+            return ZERO
         return self.worked - self.target
 
 
@@ -168,9 +175,34 @@ class Tracker:
         minutes = int(worked.total_seconds() // 60)
         if minutes <= 0:
             raise ValueError("worked time must be at least one minute")
+        name = (project or "").strip() or None
+        return self._add_manual_entry(day, minutes, name, None, replace)
+
+    def log_away_day(
+        self, day: date, kind: str, *, replace: bool = False
+    ) -> ManualEntry:
+        """Record a full working day of away time (vacation or sick leave).
+
+        The configured workday target is used as the duration, and away time
+        cannot be attributed to a project.
+        """
+        normalized = (kind or "").strip().lower() or None
+        if normalized not in AWAY_KINDS:
+            expected = ", ".join(AWAY_KINDS)
+            raise ValueError(f"unknown away kind {kind!r} (expected {expected})")
+        minutes = int(self.target().total_seconds() // 60)
+        return self._add_manual_entry(day, minutes, None, normalized, replace)
+
+    def _add_manual_entry(
+        self,
+        day: date,
+        minutes: int,
+        project: str | None,
+        kind: str | None,
+        replace: bool,
+    ) -> ManualEntry:
         if day > self.now().astimezone().date():
             raise ValueError("day must not be in the future")
-        name = (project or "").strip() or None
         for entry in self.storage.manual_entries():
             if entry.day == day and entry.replaces and not replace:
                 raise ValueError(
@@ -178,7 +210,7 @@ class Tracker:
                     "(use 'log ... --replace' to change it)"
                 )
         return self.storage.add_manual_entry(
-            day, minutes, project=name, replaces=replace
+            day, minutes, project=project, replaces=replace, kind=kind
         )
 
     # -- derived data ------------------------------------------------------
@@ -281,13 +313,24 @@ class Tracker:
 
     def day_summaries(self, end: datetime | None = None) -> list[DaySummary]:
         target = self.target()
+        worked_by_day, away_by_day = self._time_by_day(end)
+        days = sorted(worked_by_day.keys() | away_by_day.keys())
         return [
-            DaySummary(day, worked, target)
-            for day, worked in sorted(self._worked_by_day(end).items())
+            DaySummary(
+                day,
+                worked_by_day.get(day, ZERO),
+                target,
+                away_by_day.get(day, ZERO),
+            )
+            for day in days
         ]
 
-    def _worked_by_day(self, end: datetime | None = None) -> dict[date, timedelta]:
+    def _time_by_day(
+        self, end: datetime | None = None
+    ) -> tuple[dict[date, timedelta], dict[date, timedelta]]:
+        """Worked and away time per local day."""
         worked_by_day: dict[date, timedelta] = {}
+        away_by_day: dict[date, timedelta] = {}
         for interval in self.intervals(end):
             day = interval.start.astimezone().date()
             worked_by_day[day] = worked_by_day.get(day, ZERO) + interval.duration
@@ -295,20 +338,30 @@ class Tracker:
         entries = self.storage.manual_entries()
         overrides = {entry.day: entry for entry in entries if entry.replaces}
         for entry in overrides.values():
-            worked_by_day[entry.day] = timedelta(minutes=entry.minutes)
+            if entry.kind is None:
+                worked_by_day[entry.day] = timedelta(minutes=entry.minutes)
+            else:
+                worked_by_day[entry.day] = ZERO
+                away_by_day[entry.day] = timedelta(minutes=entry.minutes)
         for entry in entries:
             if entry.replaces or entry.day in overrides:
                 continue
-            worked_by_day[entry.day] = worked_by_day.get(entry.day, ZERO) + timedelta(
+            totals = away_by_day if entry.kind is not None else worked_by_day
+            totals[entry.day] = totals.get(entry.day, ZERO) + timedelta(
                 minutes=entry.minutes
             )
-        return worked_by_day
+        return worked_by_day, away_by_day
 
     def today_summary(self, end: datetime | None = None) -> DaySummary:
         moment = end or self.now()
         today = moment.astimezone().date()
-        worked = self._worked_by_day(end).get(today, ZERO)
-        return DaySummary(today, worked, self.target())
+        worked_by_day, away_by_day = self._time_by_day(end)
+        return DaySummary(
+            today,
+            worked_by_day.get(today, ZERO),
+            self.target(),
+            away_by_day.get(today, ZERO),
+        )
 
     def project_days(self, end: datetime | None = None) -> dict[str, list[ProjectDay]]:
         """Worked time per project, grouped by local day and sorted by date.
@@ -328,14 +381,19 @@ class Tracker:
                 totals[interval.project].get(day, ZERO) + interval.duration
             )
         for entry in entries:
-            if entry.replaces or entry.day in overrides or not entry.project:
+            if (
+                entry.replaces
+                or entry.day in overrides
+                or not entry.project
+                or entry.kind is not None
+            ):
                 continue
             totals.setdefault(entry.project, {})
             totals[entry.project][entry.day] = totals[entry.project].get(
                 entry.day, ZERO
             ) + timedelta(minutes=entry.minutes)
         for entry in overrides.values():
-            if not entry.project:
+            if not entry.project or entry.kind is not None:
                 continue
             totals.setdefault(entry.project, {})
             totals[entry.project][entry.day] = timedelta(minutes=entry.minutes)

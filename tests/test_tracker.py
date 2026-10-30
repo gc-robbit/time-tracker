@@ -351,6 +351,77 @@ def test_manual_day_rejects_non_positive_time(
         tracker.log_day(day, timedelta(0))
 
 
+def test_away_day_is_neutral_for_flex(tracker: Tracker, clock: FakeClock) -> None:
+    day = clock.current.astimezone().date()
+    entry = tracker.log_away_day(day, "vacation")
+
+    assert entry.kind == "vacation"
+    assert entry.project is None
+    assert entry.minutes == 8 * 60
+    summary = tracker.today_summary()
+    assert summary.worked == timedelta(0)
+    assert summary.away == timedelta(hours=8)
+    assert summary.delta == timedelta(0)
+    assert tracker.flex_balance() == timedelta(0)
+    assert tracker.project_days() == {}
+
+
+def test_away_day_uses_the_configured_workday(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    tracker.storage.set_setting("workday_minutes", "390")  # 6h30 workday
+    day = clock.current.astimezone().date()
+    entry = tracker.log_away_day(day, "sick")
+
+    assert entry.minutes == 390
+    summary = tracker.today_summary()
+    assert summary.away == timedelta(hours=6, minutes=30)
+    assert summary.target == timedelta(hours=6, minutes=30)
+    assert summary.delta == timedelta(0)
+
+
+def test_away_day_ignores_worked_time_for_flex(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    tracker.start("web")
+    clock.advance(hours=2)
+    tracker.stop()
+    day = clock.current.astimezone().date()
+
+    tracker.log_away_day(day, "sick")
+
+    summary = tracker.today_summary()
+    assert summary.worked == timedelta(hours=2)
+    assert summary.away == timedelta(hours=8)
+    assert summary.delta == timedelta(0)
+    assert tracker.flex_balance() == timedelta(0)
+    assert tracker.project_days()["web"][0].worked == timedelta(hours=2)
+
+
+def test_away_replacement_discards_worked_time(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    tracker.start("web")
+    clock.advance(hours=2)
+    tracker.stop()
+    day = clock.current.astimezone().date()
+    tracker.log_day(day, timedelta(hours=3), "web")
+
+    tracker.log_away_day(day, "vacation", replace=True)
+
+    summary = tracker.today_summary()
+    assert summary.worked == timedelta(0)
+    assert summary.away == timedelta(hours=8)
+    assert summary.delta == timedelta(0)
+    assert tracker.project_days() == {}
+
+
+def test_away_rejects_unknown_kind(tracker: Tracker, clock: FakeClock) -> None:
+    day = clock.current.astimezone().date()
+    with pytest.raises(ValueError, match="unknown away kind"):
+        tracker.log_away_day(day, "holiday")
+
+
 def test_flex_buffer_is_added_to_the_balance(
     tracker: Tracker, clock: FakeClock
 ) -> None:

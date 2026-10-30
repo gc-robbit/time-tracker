@@ -1,5 +1,6 @@
 """Tests for Storage-level queries and the event cache."""
 
+import sqlite3
 from datetime import UTC, date, datetime
 
 from time_tracker.storage import Storage
@@ -77,3 +78,34 @@ def test_manual_entries_return_defensive_copies(tmp_path) -> None:
         entries = storage.manual_entries()
         entries.clear()
         assert [entry.minutes for entry in storage.manual_entries()] == [480]
+
+
+def test_manual_entry_records_away_kind(tmp_path) -> None:
+    day = date(2026, 10, 20)
+    with Storage(tmp_path / "storage.db") as storage:
+        entry = storage.add_manual_entry(day, 480, kind="vacation")
+
+        assert entry.kind == "vacation"
+        assert entry.project is None
+        assert storage.manual_entries()[0].kind == "vacation"
+
+
+def test_legacy_manual_entries_table_gains_kind_column(tmp_path) -> None:
+    path = tmp_path / "legacy.db"
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE manual_entries ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "day TEXT NOT NULL, "
+        "minutes INTEGER NOT NULL, "
+        "project TEXT, "
+        "replaces INTEGER NOT NULL DEFAULT 0)"
+    )
+    conn.execute("INSERT INTO manual_entries (day, minutes) VALUES ('2026-10-20', 480)")
+    conn.commit()
+    conn.close()
+
+    with Storage(path) as storage:
+        assert [entry.kind for entry in storage.manual_entries()] == [None]
+        entry = storage.add_manual_entry(date(2026, 10, 21), 60, kind="sick")
+        assert entry.kind == "sick"

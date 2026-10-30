@@ -39,7 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="start at this local time today instead of now (e.g. 09:30)",
     )
     log = subparsers.add_parser(
-        "log", help="record worked time for a past day after the fact"
+        "log", help="record worked time for a past day (or a full day of leave)"
     )
     log.add_argument(
         "date",
@@ -48,8 +48,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     log.add_argument(
         "duration",
+        nargs="?",
         metavar="DURATION",
-        help="worked time, e.g. 7h30m (accepts the usual duration formats)",
+        help="worked time, e.g. 7h30m (omit for --sick or --vacay)",
     )
     log.add_argument(
         "project",
@@ -60,6 +61,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--replace",
         action="store_true",
         help="replace all tracked and manual time for that day",
+    )
+    leave = log.add_mutually_exclusive_group()
+    leave.add_argument(
+        "--sick",
+        dest="away",
+        action="store_const",
+        const="sick",
+        help="record a full day of sick leave",
+    )
+    leave.add_argument(
+        "--vacay",
+        dest="away",
+        action="store_const",
+        const="vacation",
+        help="record a full day of vacation",
     )
     subparsers.add_parser(
         "pause",
@@ -149,8 +165,9 @@ def _print_status(tracker: Tracker) -> None:
         print(f"Status : idle{suffix}")
 
     summary = tracker.today_summary()
+    away = f" + {format_duration(summary.away)} away" if summary.away else ""
     print(
-        f"Today  : {format_duration(summary.worked)} worked / "
+        f"Today  : {format_duration(summary.worked)} worked{away} / "
         f"{format_duration(summary.target)} target"
     )
     print(f"Delta  : {format_signed(summary.delta)} vs today's target")
@@ -191,12 +208,13 @@ def _print_flex_section(
             (
                 summary.day.isoformat(),
                 format_duration(summary.worked),
+                format_duration(summary.away),
                 format_duration(summary.target),
                 format_signed(summary.delta),
                 format_signed(balance),
             )
         )
-    _print_table(("Date", "Worked", "Target", "Delta", "Balance"), rows)
+    _print_table(("Date", "Worked", "Away", "Target", "Delta", "Balance"), rows)
 
 
 def _print_report(
@@ -375,25 +393,52 @@ def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
         _run_config(args, tracker)
     elif command == "log":
         day = _resolve_day(tracker, args.date)
-        worked = parse_duration(args.duration)
-        project = _resolve_project(tracker, args.project)
-        tracker.log_day(day, worked, project, replace=args.replace)
-        if _remember_default_project(tracker, project):
-            print(f"Set '{project}' as the default project.")
+        if args.away is not None:
+            if args.duration is not None:
+                raise ValueError("leave is always a full workday; omit the duration")
+            if (args.project or "").strip():
+                raise ValueError("away time cannot be attributed to a project")
+            duration = tracker.target()
+            project = None
+            tracker.log_away_day(day, args.away, replace=args.replace)
+        else:
+            if args.duration is None:
+                raise ValueError(
+                    "missing duration (expected e.g. 7h30m, or use "
+                    "--sick/--vacay for a full day of leave)"
+                )
+            duration = parse_duration(args.duration)
+            project = _resolve_project(tracker, args.project)
+            tracker.log_day(day, duration, project, replace=args.replace)
+            if project is not None and _remember_default_project(tracker, project):
+                print(f"Set '{project}' as the default project.")
         summary = next(
             (summary for summary in tracker.day_summaries() if summary.day == day),
             None,
         )
-        total = format_duration(summary.worked) if summary else "0:00"
-        target = f" for '{project}'" if project else ""
+        total = "0:00"
+        if summary is not None:
+            if args.away is not None:
+                total = (
+                    f"{format_duration(summary.worked)} worked + "
+                    f"{format_duration(summary.away)} away"
+                )
+            else:
+                total = format_duration(summary.worked)
+        if args.away is not None:
+            detail = f" {args.away}"
+        elif project:
+            detail = f" for '{project}'"
+        else:
+            detail = ""
         if args.replace:
             print(
                 f"Replaced all time on {day.isoformat()} with "
-                f"{format_duration(worked)}{target} (day total {total})."
+                f"{format_duration(duration)}{detail} (day total {total})."
             )
         else:
             print(
-                f"Logged {format_duration(worked)}{target} on "
+                f"Logged {format_duration(duration)}{detail} on "
                 f"{day.isoformat()} (day total {total})."
             )
     elif command == "report":

@@ -395,6 +395,75 @@ def test_log_accepts_relative_dates(capsys) -> None:
     assert _day() in capsys.readouterr().out
 
 
+def test_log_away_time_and_report(capsys) -> None:
+    day = _day(1)
+    assert main(["log", day, "--vacay"]) == 0
+    out = capsys.readouterr().out
+    assert f"Logged 8:00 vacation on {day}" in out
+    assert "day total 0:00 worked + 8:00 away" in out
+
+    assert main(["report", "--all"]) == 0
+    out = capsys.readouterr().out
+    assert "Away" in out
+    assert day in out
+    assert "0:00" in out
+    assert "8:00" in out
+    assert "+0:00" in out
+    # Away time is not counted as project work.
+    assert "Project:" not in out
+
+
+def test_log_leave_uses_the_configured_workday(capsys) -> None:
+    assert main(["config", "workday", "6h30m"]) == 0
+    capsys.readouterr()
+
+    day = _day(1)
+    assert main(["log", day, "--sick"]) == 0
+    out = capsys.readouterr().out
+    assert f"Logged 6:30 sick on {day}" in out
+    assert "day total 0:00 worked + 6:30 away" in out
+
+
+def test_log_leave_rejects_a_duration(capsys) -> None:
+    assert main(["log", _day(), "4h", "--sick"]) == 1
+    assert "leave is always a full workday" in capsys.readouterr().err
+
+
+def test_log_rejects_leave_and_work_flags_together(capsys) -> None:
+    with pytest.raises(SystemExit):
+        main(["log", _day(), "--sick", "--vacay"])
+    assert "not allowed with argument" in capsys.readouterr().err
+
+
+def test_log_requires_a_duration_or_leave(capsys) -> None:
+    assert main(["log", _day()]) == 1
+    assert "missing duration" in capsys.readouterr().err
+
+
+def test_log_away_replaces_the_day(capsys) -> None:
+    day = _day(2)
+    assert main(["log", day, "6h", "web"]) == 0
+    capsys.readouterr()
+
+    assert main(["log", day, "--sick", "--replace"]) == 0
+    out = capsys.readouterr().out
+    assert f"Replaced all time on {day} with 8:00 sick" in out
+    assert "day total 0:00 worked + 8:00 away" in out
+
+    assert main(["report"]) == 0
+    assert "0:00" in capsys.readouterr().out
+
+
+def test_status_shows_away_time(capsys) -> None:
+    assert main(["log", "today", "--vacay"]) == 0
+    capsys.readouterr()
+
+    assert main(["status"]) == 0
+    out = capsys.readouterr().out
+    assert "Today  : 0:00 worked + 8:00 away / 8:00 target" in out
+    assert "Delta  : +0:00" in out
+
+
 def test_log_replace_overrides_the_day(capsys) -> None:
     day = _day(3)
     assert main(["log", day, "8h", "web"]) == 0

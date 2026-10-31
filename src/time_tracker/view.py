@@ -366,21 +366,33 @@ def run_view(
 
 
 def _draw(tracker: Tracker, message: str | None, project: str | None) -> None:
+    width = _terminal_width()
     frame = render_frame(
         tracker,
         message,
         project=project,
-        width=_terminal_width(),
+        width=width,
         color=True,
     )
-    sys.stdout.write(_paint_frame(frame))
+    sys.stdout.write(_paint_frame(frame, width))
     sys.stdout.flush()
 
 
-def _paint_frame(frame: str) -> str:
-    """Overwrite the previous frame, clearing short lines and removed rows."""
+def _paint_frame(frame: str, width: int | None = None) -> str:
+    """Overwrite the previous frame, clearing short lines and removed rows.
+
+    A line that fills ``width`` columns must not be followed by an erase
+    sequence.  Writing into the last column leaves the terminal in its
+    pending-wrap state, so erase-to-end-of-line removes that last character --
+    for the live view that is the elapsed panel's right border.
+    """
     lines = frame.splitlines()
-    body = "\n".join(f"{line}\x1b[K" for line in lines)
+    body = "\n".join(
+        line
+        if width is not None and Text.from_ansi(line).cell_len >= width
+        else f"{line}\x1b[K"
+        for line in lines
+    )
     return "\x1b[H" + body + "\n\x1b[J"
 
 

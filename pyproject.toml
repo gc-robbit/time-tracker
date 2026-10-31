@@ -4,7 +4,9 @@ version = "0.5.1"
 description = "A time tracking application"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "rich>=15.0.0",
+]
 
 [project.scripts]
 time-tracker = "time_tracker:main"

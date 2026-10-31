@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import io
 import os
 import select
 import sqlite3
 import sys
 import termios
 import tty
+
+from rich import box
+from rich.align import Align
+from rich.console import Console, Group
+from rich.panel import Panel
+from rich.text import Text
 
 from .durations import (
     format_clock,
@@ -19,12 +26,39 @@ from .tracker import (
     STATE_IDLE,
     STATE_PAUSED,
     STATE_RUNNING,
+    ZERO,
     InvalidTransitionError,
     Tracker,
 )
 
 REFRESH_SECONDS = 1.0
 QUIT_KEYS = frozenset({"q", "\x03", "\x04"})
+
+# A compact 3x5 block font keeps the clock legible without pulling in a font
+# renderer.  Every glyph is three columns wide except the colon.
+_BIG_GLYPHS = {
+    "0": ("███", "█ █", "█ █", "█ █", "███"),
+    "1": (" █ ", " █ ", " █ ", " █ ", " █ "),
+    "2": ("███", "  █", "███", "█  ", "███"),
+    "3": ("███", "  █", "███", "  █", "███"),
+    "4": ("█ █", "█ █", "███", "  █", "  █"),
+    "5": ("███", "█  ", "███", "  █", "███"),
+    "6": ("███", "█  ", "███", "█ █", "███"),
+    "7": ("███", "  █", "  █", "  █", "  █"),
+    "8": ("███", "█ █", "███", "█ █", "███"),
+    "9": ("███", "█ █", "███", "  █", "███"),
+    ":": (" ", "█", " ", "█", " "),
+    "I": ("███", " █ ", " █ ", " █ ", "███"),
+    "D": ("██ ", "█ █", "█ █", "█ █", "██ "),
+    "L": ("█  ", "█  ", "█  ", "█  ", "███"),
+    "E": ("███", "█  ", "███", "█  ", "███"),
+}
+_BIG_ROWS = 5
+_STATE_STYLES = {
+    STATE_RUNNING: "bold green",
+    STATE_PAUSED: "bold yellow",
+    STATE_IDLE: "bold bright_black",
+}
 
 
 def status_lines(tracker: Tracker) -> list[str]:
@@ -73,21 +107,158 @@ def key_hints(tracker: Tracker, project: str | None = None) -> str:
     return f"[space] start{label}  [q] quit"
 
 
+def elapsed_clock(tracker: Tracker) -> str:
+    """The big clock value: current session worked time, or ``IDLE``."""
+    if tracker.state() == STATE_IDLE:
+        return "IDLE"
+    session = tracker.current_session()
+    return format_clock(session.worked if session else ZERO)
+
+
+def _big_lines(text: str) -> list[str]:
+    rows = [""] * _BIG_ROWS
+    for index, char in enumerate(text):
+        glyph = _BIG_GLYPHS.get(char, ("   ",) * _BIG_ROWS)
+        for row, part in enumerate(glyph):
+            rows[row] += (" " if index else "") + part
+    return [row.rstrip() for row in rows]
+
+
+def _big_text(text: str) -> str:
+    return "\n".join(_big_lines(text))
+
+
+def _elapsed_caption(tracker: Tracker) -> str:
+    state = tracker.state()
+    if state == STATE_IDLE:
+        last = tracker.last_event
+        if last is None:
+            return "idle — ready to start"
+        return f"idle — last event: {last.event_type} at {format_wall_clock(last.ts)}"
+
+    session = tracker.current_session()
+    project = f" '{session.project}'" if session and session.project else ""
+    started = format_wall_clock(session.started) if session else "?"
+    return f"{state}{project} — started {started}"
+
+
+def _elapsed_panel(tracker: Tracker, width: int | None) -> Panel:
+    state = tracker.state()
+    style = _STATE_STYLES[state]
+    clock = elapsed_clock(tracker)
+    title = "Status" if state == STATE_IDLE else "Elapsed"
+    big = _big_text(clock)
+    needed = max(len(line) for line in big.splitlines()) + 4
+
+    if width is not None and width < needed:
+        # Keep a narrow window usable by dropping the block font.
+        content = Group(
+            Align.center(Text(clock, style=style, no_wrap=True)),
+            Text(""),
+            Text(
+                _elapsed_caption(tracker),
+                style=style,
+                no_wrap=True,
+                overflow="crop",
+            ),
+        )
+    else:
+        content = Align.center(
+            Group(
+                Text(big, style=style, no_wrap=True),
+                Text(""),
+                Text(
+                    _elapsed_caption(tracker),
+                    style=style,
+                    no_wrap=True,
+                    overflow="crop",
+                ),
+            )
+        )
+
+    return Panel(
+        content,
+        title=title,
+        border_style=style,
+        box=box.ROUNDED,
+        padding=(0, 1),
+    )
+
+
+def build_frame(
+    tracker: Tracker,
+    message: str | None = None,
+    *,
+    project: str | None = None,
+    width: int | None = None,
+) -> Group:
+    """Build the Rich renderable for one complete live-view frame."""
+    if width is not None and width <= 0:
+        width = None
+
+    parts = [
+        _elapsed_panel(tracker, width),
+        Text(
+            "\n".join(status_lines(tracker)[1:]),
+            no_wrap=True,
+            overflow="crop",
+        ),
+    ]
+    if message:
+        parts.extend(
+            (
+                Text(""),
+                Text(
+                    message,
+                    style="bold red" if message.startswith("Error:") else "cyan",
+                    no_wrap=True,
+                    overflow="crop",
+                ),
+            )
+        )
+    parts.extend(
+        (
+            Text(""),
+            Text(
+                key_hints(tracker, project),
+                style="dim",
+                no_wrap=True,
+                overflow="crop",
+            ),
+        )
+    )
+    return Group(*parts)
+
+
 def render_frame(
     tracker: Tracker,
     message: str | None = None,
     *,
     project: str | None = None,
     width: int | None = None,
+    color: bool = False,
 ) -> str:
     """Build one complete live-view frame, optionally clipped to ``width``."""
-    lines = status_lines(tracker)
-    if message:
-        lines.extend(("", message))
-    lines.extend(("", key_hints(tracker, project)))
-    if width is not None and width > 0:
-        lines = [line[:width] for line in lines]
-    return "\n".join(lines) + "\n"
+    if width is not None and width <= 0:
+        width = None
+
+    buffer = io.StringIO()
+    console = Console(
+        file=buffer,
+        width=width,
+        force_terminal=color,
+        color_system="standard" if color else None,
+        highlight=False,
+        soft_wrap=False,
+        legacy_windows=False,
+    )
+    console.print(build_frame(tracker, message, project=project, width=width), end="")
+    frame = buffer.getvalue()
+    if not frame.endswith("\n"):
+        frame += "\n"
+    if not color and width is not None:
+        frame = "\n".join(line[:width] for line in frame.splitlines()) + "\n"
+    return frame
 
 
 def apply_key(
@@ -200,6 +371,7 @@ def _draw(tracker: Tracker, message: str | None, project: str | None) -> None:
         message,
         project=project,
         width=_terminal_width(),
+        color=True,
     )
     sys.stdout.write(_paint_frame(frame))
     sys.stdout.flush()

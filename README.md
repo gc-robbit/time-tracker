@@ -86,6 +86,30 @@ time-tracker watch          # uses the default project when starting
 time-tracker watch web      # starts 'web' when idle
 ```
 
+The current session's elapsed time is shown as a large block clock, so it is
+easy to read from across the room:
+
+```
+╭──────────────────────── Elapsed ─────────────────────────╮
+│             █ █    █  ███   ███ ███                      │
+│             █ █ █  █  █ █ █   █   █                      │
+│             ███    █  █ █   ███ ███                      │
+│               █ █  █  █ █ █ █   █                        │
+│               █    █  ███   ███ ███                      │
+│                                                          │
+│             running 'web' — started 09:12:34             │
+╰──────────────────────────────────────────────────────────╯
+Today  : 4:10 worked / 8:00 target
+Delta  : -3:50 vs today's target
+Flex   : +1:30 overall
+
+[space] pause  [x] stop  [q] quit
+```
+
+The clock counts actual worked time, excluding pauses. It freezes while the
+session is paused and shows `IDLE` when no session is active. In a very narrow
+window the block clock falls back to a compact one-line display.
+
 It refreshes once per second and accepts single-key commands:
 
 | Key          | Idle  | Running     | Paused      |

@@ -2,11 +2,14 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
+from time_tracker.durations import format_wall_clock
 from time_tracker.storage import Storage
 from time_tracker.tracker import STATE_IDLE, STATE_PAUSED, STATE_RUNNING, Tracker
 from time_tracker.view import (
+    _big_text,
     _paint_frame,
     apply_key,
+    elapsed_clock,
     key_hints,
     render_frame,
     status_lines,
@@ -22,6 +25,10 @@ class FixedClock:
 
     def advance(self, **kwargs: int) -> None:
         self.current += timedelta(**kwargs)
+
+
+def _has_big_text(frame: str, text: str) -> bool:
+    return all(line.strip() in frame for line in _big_text(text).splitlines())
 
 
 @pytest.fixture
@@ -107,7 +114,67 @@ def test_render_frame_elapsed_updates_as_time_passes(
     second = render_frame(tracker)
 
     assert first != second
-    assert "elapsed 0:00:05" in second
+    assert _has_big_text(second, "0:00:05")
+
+
+def test_elapsed_clock_uses_worked_time_and_freezes_when_paused(
+    tracker: Tracker, clock: FixedClock
+) -> None:
+    assert elapsed_clock(tracker) == "IDLE"
+
+    tracker.start("web")
+    clock.advance(hours=1, minutes=2, seconds=3)
+    assert elapsed_clock(tracker) == "1:02:03"
+
+    tracker.pause()
+    clock.advance(hours=1)
+    assert elapsed_clock(tracker) == "1:02:03"
+
+    tracker.resume()
+    clock.advance(minutes=1)
+    assert elapsed_clock(tracker) == "1:03:03"
+
+    tracker.stop()
+    assert elapsed_clock(tracker) == "IDLE"
+
+
+def test_render_frame_shows_a_big_clock_and_state_caption(
+    tracker: Tracker, clock: FixedClock
+) -> None:
+    idle = render_frame(tracker)
+    assert _has_big_text(idle, "IDLE")
+    assert "idle — ready to start" in idle
+
+    tracker.start("web")
+    started = format_wall_clock(clock.current)
+    clock.advance(hours=4, minutes=10, seconds=22)
+    frame = render_frame(tracker)
+
+    assert "Elapsed" in frame
+    assert _has_big_text(frame, "4:10:22")
+    assert f"running 'web' — started {started}" in frame
+    assert "Today  : 4:10 worked / 8:00 target" in frame
+
+    tracker.pause()
+    paused = render_frame(tracker)
+    assert f"paused 'web' — started {started}" in paused
+    assert _has_big_text(paused, "4:10:22")
+
+
+def test_render_frame_uses_a_compact_clock_in_a_narrow_window(
+    tracker: Tracker,
+) -> None:
+    tracker.start("web")
+
+    frame = render_frame(tracker, width=20)
+
+    assert _big_text("0:00:00") not in frame
+    assert "0:00:00" in frame
+    assert all(len(line) <= 20 for line in frame.splitlines())
+
+
+def test_render_frame_can_emit_terminal_colors(tracker: Tracker) -> None:
+    assert "\x1b[" in render_frame(tracker, color=True)
 
 
 def test_space_cycles_start_pause_resume_and_stop(tracker: Tracker) -> None:

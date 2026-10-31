@@ -41,8 +41,8 @@ def test_check_reports_freshness(dist: Path, tmp_path: Path) -> None:
 def test_dist_has_uv_script_header(dist: Path) -> None:
     text = dist.read_text()
     assert text.startswith("#!/usr/bin/env -S uv run --script\n# /// script\n")
-    assert 'requires-python = ">=3.11"' in text
-    assert "dependencies = []" in text
+    assert 'requires-python = ">=3.13"' in text
+    assert "rich" in text
     assert text.rstrip().endswith("sys.exit(main())")
     assert os.access(dist, os.X_OK), "the distribution must be executable"
 

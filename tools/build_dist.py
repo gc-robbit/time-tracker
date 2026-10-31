@@ -16,8 +16,10 @@ OUTPUT = REPO_ROOT / "dist" / "time-tracker"
 
 HEADER = '''#!/usr/bin/env -S uv run --script
 # /// script
-# requires-python = ">=3.11"
-# dependencies = []
+# requires-python = ">=3.13"
+# dependencies = [
+#     "rich>=15.0.0",
+# ]
 # ///
 """
 time-tracker — single-file distribution.

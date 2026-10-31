@@ -1,3 +1,11 @@
+## v0.6.0 (2026-10-31)
+
+### Feat
+
+- add a large elapsed clock to watch view
+- add live status view with keyboard controls
+- support away time (#21)
+
 ## v0.5.1 (2026-10-27)
 
 ### Perf

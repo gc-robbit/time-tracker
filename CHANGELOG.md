@@ -1,3 +1,13 @@
+## v0.7.0 (2026-10-31)
+
+### Feat
+
+- default reports to the current month
+
+### Fix
+
+- keep the elapsed panel's right border visible
+
 ## v0.6.0 (2026-10-31)
 
 ### Feat

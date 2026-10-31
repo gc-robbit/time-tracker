@@ -105,6 +105,24 @@ def test_paint_frame_clears_each_line_and_removed_rows() -> None:
     assert output == "\x1b[Hfirst\x1b[K\n\x1b[K\nthird\x1b[K\n\x1b[J"
 
 
+def test_paint_frame_keeps_the_last_column_of_a_full_width_line() -> None:
+    border = "╭" + "─" * 8 + "╮"
+
+    output = _paint_frame(f"{border}\nshort\n", width=10)
+
+    # An erase after a full-width line would wipe its last character, which is
+    # the right border of the elapsed panel.
+    assert output == f"\x1b[H{border}\nshort\x1b[K\n\x1b[J"
+
+
+def test_paint_frame_measures_colored_lines_by_visible_width() -> None:
+    line = "\x1b[32m" + "x" * 10 + "\x1b[0m"
+
+    output = _paint_frame(f"{line}\n", width=10)
+
+    assert output == f"\x1b[H{line}\n\x1b[J"
+
+
 def test_render_frame_elapsed_updates_as_time_passes(
     tracker: Tracker, clock: FixedClock
 ) -> None:

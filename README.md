@@ -25,7 +25,7 @@ time-tracker stop             # end the current session and show its totals
 time-tracker status           # current state + today's delta (default command)
 time-tracker watch            # live status view with keyboard controls
 time-tracker watch web        # ... starting 'web' when idle
-time-tracker report           # global flex history
+time-tracker report           # current month's global flex history
 time-tracker report --all     # also break worked time down per project
 time-tracker report web       # worked time for one project only
 time-tracker report --start 2026-10-01 --end 2026-10-15  # limit the range
@@ -69,13 +69,15 @@ Flex   : +1:30 overall
 - **Initial flex buffer** — an optional starting balance added to Flex, set with
   `config flex_buffer` (positive or negative, e.g. `10h` or `-2h30m`). It is
   useful for carrying flex in from before you started using the tracker.
-- **Report** — shows the global daily delta/balance history, starting from the
-  initial buffer. Pass `--all` to also break worked time down per project, or
-  name a project to report on just that one. `--start DATE` and `--end DATE`
-  limit any report to an inclusive date range (accepting `YYYY-MM-DD`, `today`
-  or `yesterday`); the flex balance carried into the range is shown as the
-  starting balance. The global report includes an **Away** column for
-  vacation and sick leave (see [Away time](#away-time)).
+- **Report** — shows the global daily delta/balance history for the current
+  month, starting from the initial buffer. Pass `--all` to also break worked
+  time down per project, or name a project to report on just that one.
+  `--start DATE` and `--end DATE` limit any report to an inclusive date range
+  (accepting `YYYY-MM-DD`, `today` or `yesterday`); when neither is given the
+  range is the first of the current month through today. The flex balance
+  carried into the range is shown as the starting balance. The global report
+  includes an **Away** column for vacation and sick leave (see [Away
+  time](#away-time)).
 
 ### Live status view
 

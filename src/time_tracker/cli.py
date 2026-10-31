@@ -100,7 +100,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     report = subparsers.add_parser(
         "report",
-        help="show the global flex history (optionally broken down per project)",
+        help=(
+            "show the global flex history for the current month by default "
+            "(optionally broken down per project)"
+        ),
     )
     report.add_argument("project", nargs="?", help="only report on this project")
     report.add_argument(
@@ -418,6 +421,10 @@ def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
             raise ValueError("cannot combine a project with --all")
         start = _resolve_day(tracker, args.start) if args.start else None
         end = _resolve_day(tracker, args.end) if args.end else None
+        if start is None and end is None:
+            # With no explicit range, report on the current month to date.
+            end = tracker.now().astimezone().date()
+            start = end.replace(day=1)
         if start is not None and end is not None and start > end:
             raise ValueError("start date must not be after end date")
         _print_report(

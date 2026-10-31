@@ -96,7 +96,7 @@ def test_dist_smoke_flow(dist: Path, tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert "Logged 8:00 vacation" in result.stdout
 
-    result = run("report")
+    result = run("report", "--start", "yesterday")
     assert result.returncode == 0
     assert "Away" in result.stdout
     assert "+0:00" in result.stdout

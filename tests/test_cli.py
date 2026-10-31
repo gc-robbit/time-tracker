@@ -274,6 +274,21 @@ def test_report_date_range(capsys) -> None:
     assert newer not in out
 
 
+def test_report_defaults_to_the_current_month(capsys) -> None:
+    today = datetime.now().astimezone().date()
+    previous_month = today.replace(day=1) - timedelta(days=1)
+    assert main(["log", previous_month.isoformat(), "9h", "web"]) == 0
+    assert main(["log", today.isoformat(), "6h", "web"]) == 0
+    capsys.readouterr()
+
+    assert main(["report"]) == 0
+    out = capsys.readouterr().out
+    assert today.isoformat() in out
+    assert previous_month.isoformat() not in out
+    # Flex from before the current month is carried in as the starting balance.
+    assert "Starting balance: +1:00" in out
+
+
 def test_report_rejects_conflicting_or_invalid_ranges(capsys) -> None:
     assert main(["report", "web", "--all"]) == 1
     assert "cannot combine" in capsys.readouterr().err
@@ -366,12 +381,12 @@ def test_log_manual_day_and_report(capsys) -> None:
     assert main(["log", day, "30m", "web"]) == 0
     assert "day total 8:00" in capsys.readouterr().out
 
-    assert main(["report", "--all"]) == 0
+    assert main(["report", "--all", "--start", day]) == 0
     out = capsys.readouterr().out
     assert "Project: web" in out
     assert day in out
     assert "8:00" in out
-    assert main(["report"]) == 0
+    assert main(["report", "--start", day]) == 0
     out = capsys.readouterr().out
     assert day in out
     assert "8:00" in out
@@ -410,7 +425,7 @@ def test_log_away_time_and_report(capsys) -> None:
     assert f"Logged 8:00 vacation on {day}" in out
     assert "day total 0:00 worked + 8:00 away" in out
 
-    assert main(["report", "--all"]) == 0
+    assert main(["report", "--all", "--start", day]) == 0
     out = capsys.readouterr().out
     assert "Away" in out
     assert day in out
@@ -458,7 +473,7 @@ def test_log_away_replaces_the_day(capsys) -> None:
     assert f"Replaced all time on {day} with 8:00 sick" in out
     assert "day total 0:00 worked + 8:00 away" in out
 
-    assert main(["report"]) == 0
+    assert main(["report", "--start", day]) == 0
     assert "0:00" in capsys.readouterr().out
 
 
@@ -482,7 +497,7 @@ def test_log_replace_overrides_the_day(capsys) -> None:
     assert f"Replaced all time on {day} with 7:00 for 'design'" in out
     assert "day total 7:00" in out
 
-    assert main(["report", "--all"]) == 0
+    assert main(["report", "--all", "--start", day]) == 0
     out = capsys.readouterr().out
     assert "Project: design" in out
     assert "Project: web" not in out
@@ -493,7 +508,7 @@ def test_log_without_project_only_affects_global_flex(capsys) -> None:
     assert main(["log", day, "8h"]) == 0
     capsys.readouterr()
 
-    assert main(["report"]) == 0
+    assert main(["report", "--start", day]) == 0
     out = capsys.readouterr().out
     assert "No time tracked yet" not in out
     assert "Flex (global):" in out

@@ -1,3 +1,9 @@
+## v0.8.0 (2026-11-02)
+
+### Feat
+
+- show today's worked time in the terminal title
+
 ## v0.7.0 (2026-10-31)
 
 ### Feat

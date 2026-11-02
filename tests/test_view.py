@@ -1,3 +1,5 @@
+import io
+import sys
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -7,12 +9,15 @@ from time_tracker.storage import Storage
 from time_tracker.tracker import STATE_IDLE, STATE_PAUSED, STATE_RUNNING, Tracker
 from time_tracker.view import (
     _big_text,
+    _draw,
     _paint_frame,
+    _title_sequence,
     apply_key,
     elapsed_clock,
     key_hints,
     render_frame,
     status_lines,
+    window_title,
 )
 
 
@@ -154,6 +159,44 @@ def test_elapsed_clock_uses_worked_time_and_freezes_when_paused(
 
     tracker.stop()
     assert elapsed_clock(tracker) == "IDLE"
+
+
+def test_window_title_shows_today_worked_time_without_seconds(
+    tracker: Tracker, clock: FixedClock
+) -> None:
+    assert window_title(tracker) == "0:00 worked — time-tracker"
+
+    tracker.start("web")
+    clock.advance(hours=1, minutes=2, seconds=3)
+    assert window_title(tracker) == "1:02 worked — time-tracker"
+
+    tracker.pause()
+    clock.advance(hours=1)
+    assert window_title(tracker) == "1:02 worked — time-tracker"
+
+    tracker.resume()
+    clock.advance(minutes=1, seconds=5)
+    assert window_title(tracker) == "1:03 worked — time-tracker"
+
+    tracker.stop()
+    assert window_title(tracker) == "1:03 worked — time-tracker"
+
+
+def test_title_sequence_sets_the_terminal_title() -> None:
+    assert _title_sequence("4:10 worked — time-tracker") == (
+        "\x1b]0;4:10 worked — time-tracker\x07"
+    )
+
+
+def test_draw_updates_the_terminal_title(tracker: Tracker, monkeypatch) -> None:
+    output = io.StringIO()
+    monkeypatch.setattr(sys, "stdout", output)
+    monkeypatch.setattr("time_tracker.view._terminal_width", lambda: None)
+
+    tracker.start("web")
+    _draw(tracker, None, None)
+
+    assert "\x1b]0;0:00 worked — time-tracker\x07" in output.getvalue()
 
 
 def test_render_frame_shows_a_big_clock_and_state_caption(

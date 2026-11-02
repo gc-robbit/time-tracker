@@ -115,6 +115,16 @@ def elapsed_clock(tracker: Tracker) -> str:
     return format_clock(session.worked if session else ZERO)
 
 
+def window_title(tracker: Tracker) -> str:
+    """The terminal title: today's worked total, rounded down to minutes."""
+    return f"{format_duration(tracker.today_summary().worked)} worked — time-tracker"
+
+
+def _title_sequence(title: str) -> str:
+    """The OSC escape sequence that sets the terminal window title."""
+    return f"\x1b]0;{title}\x07"
+
+
 def _big_lines(text: str) -> list[str]:
     rows = [""] * _BIG_ROWS
     for index, char in enumerate(text):
@@ -374,6 +384,7 @@ def _draw(tracker: Tracker, message: str | None, project: str | None) -> None:
         width=width,
         color=True,
     )
+    sys.stdout.write(_title_sequence(window_title(tracker)))
     sys.stdout.write(_paint_frame(frame, width))
     sys.stdout.flush()
 

@@ -112,6 +112,12 @@ The clock counts actual worked time, excluding pauses. It freezes while the
 session is paused and shows `IDLE` when no session is active. In a very narrow
 window the block clock falls back to a compact one-line display.
 
+While running, `watch` also updates the terminal window or tab title with
+today's worked total to the minute (for example `4:10 worked — time-tracker`),
+so you can check your progress from another window. This is best-effort:
+terminals that do not support title changes simply ignore it, and terminal
+multiplexers such as tmux or screen may need title updates enabled.
+
 It refreshes once per second and accepts single-key commands:
 
 | Key          | Idle  | Running     | Paused      |

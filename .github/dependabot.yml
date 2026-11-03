@@ -7,9 +7,19 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    # Let a fresh release settle before bumping, so a quickly-yanked version
+    # never lands here. Bigger jumps wait longer. Security updates ignore this.
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+      semver-minor-days: 7
+      semver-patch-days: 3
 
   # GitHub Actions used by CI
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+    # This ecosystem only supports the default cooldown (no per-semver days).
+    cooldown:
+      default-days: 7

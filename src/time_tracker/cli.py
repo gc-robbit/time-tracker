@@ -400,10 +400,11 @@ def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
         print(f"Resumed at {format_wall_clock(event.ts)}.")
     elif command == "stop":
         session = tracker.stop(_resolve_stop_time(tracker, args.at))
-        wall_time = session.wall_time or timedelta(0)
+        ended = session.ended or tracker.now()
+        wall_time = ended - session.started
         name = f" '{session.project}'" if session.project else ""
         print(
-            f"Stopped at {format_wall_clock(session.ended)}. "
+            f"Stopped at {format_wall_clock(ended)}. "
             f"Session{name} worked {format_duration(session.worked)} "
             f"(wall clock {format_duration(wall_time)})."
         )

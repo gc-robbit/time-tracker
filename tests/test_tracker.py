@@ -164,6 +164,56 @@ def test_stop_while_paused_works(tracker: Tracker, clock: FakeClock) -> None:
     assert session.worked == timedelta(hours=4)
 
 
+def test_stop_at_backdates_the_end(tracker: Tracker, clock: FakeClock) -> None:
+    tracker.start("web")
+    clock.advance(hours=2)
+    ended = clock.current - timedelta(minutes=30)
+
+    session = tracker.stop(at=ended)
+
+    assert tracker.state() == "idle"
+    assert session.ended == ended
+    assert session.worked == timedelta(hours=1, minutes=30)
+
+
+def test_stop_at_accepts_the_last_event_time(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    started = tracker.start("web")
+    clock.advance(hours=2)
+
+    session = tracker.stop(at=started.ts)
+
+    assert session.worked == timedelta(0)
+
+
+def test_stop_at_rejects_a_future_time(tracker: Tracker, clock: FakeClock) -> None:
+    tracker.start("web")
+
+    with pytest.raises(ValueError, match="future"):
+        tracker.stop(at=clock.current + timedelta(minutes=1))
+    assert tracker.state() == "running"
+
+
+def test_stop_at_rejects_a_naive_time(tracker: Tracker, clock: FakeClock) -> None:
+    tracker.start("web")
+
+    with pytest.raises(ValueError, match="timezone-aware"):
+        tracker.stop(at=clock.current.replace(tzinfo=None))
+    assert tracker.state() == "running"
+
+
+def test_stop_at_rejects_a_time_before_the_last_event(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    started = tracker.start("web")
+    clock.advance(hours=2)
+
+    with pytest.raises(ValueError, match="earlier than the last recorded event"):
+        tracker.stop(at=started.ts - timedelta(minutes=1))
+    assert tracker.state() == "running"
+
+
 def test_persisted_state_survives_reopen(tmp_path, clock: FakeClock) -> None:
     path = tmp_path / "persist.db"
     with Storage(path) as storage:

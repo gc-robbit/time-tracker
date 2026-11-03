@@ -324,26 +324,27 @@ def test_quit_keys_leave_an_idle_view_alone(tracker: Tracker) -> None:
 
 
 @pytest.mark.parametrize("key", ["q", "\x03", "\x04"])
-def test_quit_keys_stop_a_running_session(tracker: Tracker, key: str) -> None:
+def test_quit_keys_leave_a_running_session_active(tracker: Tracker, key: str) -> None:
     tracker.start("web")
 
     keep_running, message = apply_key(tracker, key)
 
     assert not keep_running
-    assert message is not None and message.startswith("Stopped at ")
-    assert "Session 'web' worked" in message
-    assert tracker.state() == STATE_IDLE
+    assert message is not None and message.startswith("Still tracking 'web'")
+    assert "time-tracker stop" in message
+    assert tracker.state() == STATE_RUNNING
 
 
-def test_quit_while_paused_stops_the_session(tracker: Tracker) -> None:
+def test_quit_while_paused_leaves_the_session_paused(tracker: Tracker) -> None:
     tracker.start("web")
     tracker.pause()
 
     keep_running, message = apply_key(tracker, "q")
 
     assert not keep_running
-    assert message is not None and message.startswith("Stopped at ")
-    assert tracker.state() == STATE_IDLE
+    assert message is not None and "paused" in message
+    assert "time-tracker stop" in message
+    assert tracker.state() == STATE_PAUSED
 
 
 def test_unknown_keys_are_ignored(tracker: Tracker) -> None:

@@ -149,10 +149,21 @@ class Tracker:
             raise InvalidTransitionError("Time tracking is already running.")
         return self.storage.add_event("resume", self.now())
 
-    def stop(self) -> Session:
+    def stop(self, at: datetime | None = None) -> Session:
         if self.state() == STATE_IDLE:
             raise InvalidTransitionError("No session in progress — nothing to stop.")
-        self.storage.add_event("stop", self.now())
+        now = self.now()
+        moment = at if at is not None else now
+        if moment.tzinfo is None:
+            raise ValueError("stop time must be timezone-aware")
+        if moment > now:
+            raise ValueError("stop time must not be in the future")
+        last = self.last_event
+        if last is not None and moment < last.ts:
+            raise ValueError(
+                "stop time must not be earlier than the last recorded event"
+            )
+        self.storage.add_event("stop", moment)
         session = self.current_session()
         if session is None:  # pragma: no cover - defensive
             raise InvalidTransitionError("No session in progress — nothing to stop.")

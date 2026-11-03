@@ -1,3 +1,9 @@
+## v0.9.1 (2026-11-03)
+
+### Refactor
+
+- narrow the stopped session's end time in stop output
+
 ## v0.9.0 (2026-11-03)
 
 ### Feat

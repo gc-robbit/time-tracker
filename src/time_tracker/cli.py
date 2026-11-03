@@ -6,7 +6,7 @@ import argparse
 import re
 import sqlite3
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from .durations import (
     format_duration,
@@ -88,7 +88,17 @@ def build_parser() -> argparse.ArgumentParser:
         aliases=["resume", "back"],
         help="resume a paused session",
     )
-    subparsers.add_parser("stop", help="stop the current session")
+    stop = subparsers.add_parser(
+        "stop", help="stop the current session (optionally at a past time)"
+    )
+    stop.add_argument(
+        "--at",
+        metavar="TIME",
+        help=(
+            "stop at this local time instead of now (e.g. 17:30, "
+            "'yesterday 17:30' or '2026-10-20 17:30')"
+        ),
+    )
     subparsers.add_parser("status", help="show current status (default)")
     watch = subparsers.add_parser(
         "watch", help="show a continuously updating status view"
@@ -283,6 +293,20 @@ def _resolve_project(tracker: Tracker, value: str | None) -> str | None:
     return (value or "").strip() or tracker.default_project
 
 
+def _local_moment(day: date, tod: time, label: str) -> datetime:
+    """Combine a local date and time, resolving DST gaps and folds."""
+    naive = datetime.combine(day, tod)
+    first = naive.replace(fold=0).astimezone()
+    second = naive.replace(fold=1).astimezone()
+    # A skipped local time cannot round-trip back to the same wall clock.
+    if first.replace(tzinfo=None) != naive or second.replace(tzinfo=None) != naive:
+        raise ValueError(
+            f"local time {label!r} does not exist on "
+            f"{day.isoformat()} (local clocks skip it)"
+        )
+    return first
+
+
 def _resolve_start_time(tracker: Tracker, value: str | None) -> datetime | None:
     """Turn a local time of day into an aware datetime for today.
 
@@ -292,17 +316,37 @@ def _resolve_start_time(tracker: Tracker, value: str | None) -> datetime | None:
     if value is None:
         return None
     parsed = parse_time_of_day(value)
-    local_now = tracker.now().astimezone()
-    naive = datetime.combine(local_now.date(), parsed)
-    first = naive.replace(fold=0).astimezone()
-    second = naive.replace(fold=1).astimezone()
-    # A skipped local time cannot round-trip back to the same wall clock.
-    if first.replace(tzinfo=None) != naive or second.replace(tzinfo=None) != naive:
+    return _local_moment(tracker.now().astimezone().date(), parsed, value)
+
+
+def _resolve_stop_time(tracker: Tracker, value: str | None) -> datetime | None:
+    """Parse a local stop time, optionally with a past date.
+
+    Accepts ``HH:MM[:SS]`` for today, ``yesterday HH:MM``/``today HH:MM``,
+    or an ISO-style ``YYYY-MM-DD HH:MM`` (``T`` also works).
+    """
+    if value is None:
+        return None
+
+    text = value.strip()
+    day_text: str | None = None
+    time_text = text
+    parts = text.split(maxsplit=1)
+    if len(parts) == 2:
+        day_text, time_text = parts
+    elif "T" in text:
+        day_text, time_text = text.split("T", 1)
+
+    if not time_text:
         raise ValueError(
-            f"local time {value!r} does not exist on "
-            f"{local_now.date().isoformat()} (local clocks skip it)"
+            f"invalid time {value!r} (expected e.g. 17:30 or 'yesterday 17:30')"
         )
-    return first
+    day = (
+        _resolve_day(tracker, day_text)
+        if day_text is not None
+        else tracker.now().astimezone().date()
+    )
+    return _local_moment(day, parse_time_of_day(time_text), time_text)
 
 
 def _resolve_day(tracker: Tracker, value: str) -> date:
@@ -355,7 +399,7 @@ def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
         event = tracker.resume()
         print(f"Resumed at {format_wall_clock(event.ts)}.")
     elif command == "stop":
-        session = tracker.stop()
+        session = tracker.stop(_resolve_stop_time(tracker, args.at))
         wall_time = session.wall_time or timedelta(0)
         name = f" '{session.project}'" if session.project else ""
         print(

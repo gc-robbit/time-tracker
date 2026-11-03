@@ -22,6 +22,7 @@ time-tracker start web --at 09:00   # begin at a specific local time today
 time-tracker pause            # pause the running session (aliases: lunch, out)
 time-tracker continue         # resume a paused session (aliases: resume, back)
 time-tracker stop             # end the current session and show its totals
+time-tracker stop --at "yesterday 17:30"  # end a session left running
 time-tracker status           # current state + today's delta (default command)
 time-tracker watch            # live status view with keyboard controls
 time-tracker watch web        # ... starting 'web' when idle
@@ -53,6 +54,19 @@ By default `start` uses the current time. Use `--at HH:MM` (or
 not be in the future or earlier than the last recorded event. Local times that
 are skipped when the clocks go forward are rejected; if a time occurs twice
 when the clocks go back, the first occurrence is used.
+
+`stop` accepts the same `--at` idea, and also allows a date so you can fix a
+session that was left running overnight:
+
+```sh
+time-tracker stop --at 17:30                 # today
+time-tracker stop --at "yesterday 17:30"     # a session from yesterday
+time-tracker stop --at "2026-10-20 17:30"    # an explicit local date
+```
+
+The stop time must not be in the future or earlier than the session's last
+recorded event. This records a normal `stop` event, so reports, flex and
+per-project totals stay accurate without a manual override.
 
 `status` shows a one-off status snapshot, e.g.:
 
@@ -127,9 +141,13 @@ It refreshes once per second and accepts single-key commands:
 | `p`          | —     | pause       | —           |
 | `c`          | —     | —           | resume      |
 | `x`          | —     | stop        | stop        |
-| `q` / Ctrl-C | quit  | quit + stop | quit + stop |
+| `q` / Ctrl-C | quit  | quit        | quit        |
 
-Quitting with `q` or Ctrl-C also stops the current session, if there is one.
+Quitting with `q` or Ctrl-C only closes the view; a running or paused session
+stays active so you can pick it up again later. Use `x` to stop it from the
+view, or run `time-tracker stop` from another shell. If you leave a session
+running by mistake, `time-tracker stop --at ...` ends it at the time you
+actually stopped working (see [Recording a past day](#recording-a-past-day)).
 
 Worked time, delta and flex use minute-level formatting; only the running
 session's `elapsed` value ticks in seconds. Changes made from another shell

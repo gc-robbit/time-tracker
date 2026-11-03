@@ -277,9 +277,7 @@ def apply_key(
     """Apply one key press, returning ``(keep_running, message)``."""
     try:
         if key in QUIT_KEYS:
-            if tracker.state() == STATE_IDLE:
-                return False, None
-            return False, _stop(tracker)
+            return False, _quit_message(tracker)
         state = tracker.state()
         if key == " ":
             if state == STATE_IDLE:
@@ -304,6 +302,21 @@ def apply_key(
         return True, None
     except (InvalidTransitionError, ValueError, sqlite3.Error) as error:
         return key not in QUIT_KEYS, f"Error: {error}"
+
+
+def _quit_message(tracker: Tracker) -> str | None:
+    """Remind the user that quitting the view leaves the session untouched."""
+    state = tracker.state()
+    if state == STATE_IDLE:
+        return None
+
+    session = tracker.current_session()
+    name = f" '{session.project}'" if session and session.project else ""
+    if state == STATE_PAUSED:
+        return (
+            f"Session{name} is paused — 'time-tracker continue' or 'time-tracker stop'."
+        )
+    return f"Still tracking{name} — 'time-tracker stop' when done."
 
 
 def _stop(tracker: Tracker) -> str:

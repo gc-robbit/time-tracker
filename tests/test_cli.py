@@ -2,10 +2,12 @@ import os
 import time
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from datetime import time as dt_time
 
 import pytest
 
 from time_tracker.cli import _resolve_start_time, main
+from time_tracker.storage import Storage
 from time_tracker.tracker import Tracker
 
 
@@ -145,6 +147,62 @@ def test_start_at_specific_time(capsys) -> None:
     assert "Started 'web' at 00:00:00" in out
 
     assert main(["stop"]) == 0
+
+
+def test_stop_at_a_past_time(capsys) -> None:
+    local_now = datetime.now(UTC).astimezone().replace(microsecond=0)
+    started = local_now - timedelta(hours=2)
+    ended = started + timedelta(hours=1)
+    with Storage() as storage:
+        Tracker(storage, now=lambda: started).start("web")
+
+    at = f"{ended.date().isoformat()} {ended:%H:%M:%S}"
+    assert main(["stop", "--at", at]) == 0
+    out = capsys.readouterr().out
+    assert f"Stopped at {ended:%H:%M:%S}" in out
+    assert "Session 'web' worked 1:00" in out
+
+
+def test_stop_at_accepts_a_relative_date(capsys) -> None:
+    yesterday = datetime.now().astimezone().date() - timedelta(days=1)
+    started = datetime.combine(yesterday, dt_time(10, 0)).astimezone()
+    with Storage() as storage:
+        Tracker(storage, now=lambda: started).start("web")
+
+    assert main(["stop", "--at", "yesterday 17:30"]) == 0
+    out = capsys.readouterr().out
+    assert "Stopped at 17:30:00" in out
+    assert "Session 'web' worked 7:30" in out
+
+
+def test_stop_at_rejects_a_time_before_the_session_started(capsys) -> None:
+    local_now = datetime.now(UTC).astimezone()
+    started = local_now - timedelta(minutes=30)
+    with Storage() as storage:
+        Tracker(storage, now=lambda: started).start("web")
+
+    before = started - timedelta(minutes=1)
+    at = f"{before.date().isoformat()} {before:%H:%M:%S}"
+    assert main(["stop", "--at", at]) == 1
+    assert "earlier than the last recorded event" in capsys.readouterr().err
+
+
+def test_stop_at_rejects_a_future_time(capsys) -> None:
+    assert main(["start", "web"]) == 0
+    capsys.readouterr()
+
+    tomorrow = datetime.now().astimezone() + timedelta(days=1)
+    at = f"{tomorrow.date().isoformat()} {tomorrow:%H:%M:%S}"
+    assert main(["stop", "--at", at]) == 1
+    assert "future" in capsys.readouterr().err
+
+
+def test_stop_at_rejects_an_invalid_time(capsys) -> None:
+    assert main(["start", "web"]) == 0
+    capsys.readouterr()
+
+    assert main(["stop", "--at", "banana"]) == 1
+    assert "invalid time" in capsys.readouterr().err
 
 
 def test_start_at_nonexistent_local_time_fails(amsterdam_tz) -> None:

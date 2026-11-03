@@ -1,3 +1,9 @@
+## v0.9.0 (2026-11-03)
+
+### Feat
+
+- keep sessions running when watch quits
+
 ## v0.8.0 (2026-11-02)
 
 ### Feat

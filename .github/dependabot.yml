@@ -7,6 +7,11 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    groups:
+      minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
     # Let a fresh release settle before bumping, so a quickly-yanked version
     # never lands here. Bigger jumps wait longer. Security updates ignore this.
     cooldown:

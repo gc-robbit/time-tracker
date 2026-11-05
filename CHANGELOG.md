@@ -1,3 +1,9 @@
+## v0.10.0 (2026-11-05)
+
+### Feat
+
+- stop the session and quit watch with Shift+Q
+
 ## v0.9.1 (2026-11-03)
 
 ### Refactor

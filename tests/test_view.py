@@ -81,10 +81,12 @@ def test_render_frame_shows_state_specific_hints(tracker: Tracker) -> None:
     assert "[space] start  [q] quit" in render_frame(tracker)
 
     tracker.start("web")
-    assert "[space] pause  [x] stop  [q] quit" in render_frame(tracker)
+    assert "[space] pause  [x] stop  [Q] stop & quit  [q] quit" in render_frame(tracker)
 
     tracker.pause()
-    assert "[space] continue  [x] stop  [q] quit" in render_frame(tracker)
+    assert "[space] continue  [x] stop  [Q] stop & quit  [q] quit" in render_frame(
+        tracker
+    )
 
 
 def test_render_frame_uses_the_project_argument_in_the_idle_hint(
@@ -345,6 +347,41 @@ def test_quit_while_paused_leaves_the_session_paused(tracker: Tracker) -> None:
     assert message is not None and "paused" in message
     assert "time-tracker stop" in message
     assert tracker.state() == STATE_PAUSED
+
+
+def test_shift_q_stops_a_running_session_and_quits(tracker: Tracker) -> None:
+    tracker.start("web")
+
+    keep_running, message = apply_key(tracker, "Q")
+
+    assert not keep_running
+    assert message is not None and message.startswith("Stopped at ")
+    assert "Session 'web' worked" in message
+    assert tracker.state() == STATE_IDLE
+
+
+def test_shift_q_stops_a_paused_session_and_quits(tracker: Tracker) -> None:
+    tracker.start("web")
+    tracker.pause()
+
+    keep_running, message = apply_key(tracker, "Q")
+
+    assert not keep_running
+    assert message is not None and message.startswith("Stopped at ")
+    assert tracker.state() == STATE_IDLE
+
+
+def test_shift_q_on_an_idle_view_just_quits(tracker: Tracker) -> None:
+    assert apply_key(tracker, "Q") == (False, None)
+    assert tracker.state() == STATE_IDLE
+
+
+def test_key_hints_offer_stop_and_quit_while_tracking(tracker: Tracker) -> None:
+    tracker.start("web")
+    assert "[Q] stop & quit" in key_hints(tracker)
+
+    tracker.pause()
+    assert "[Q] stop & quit" in key_hints(tracker)
 
 
 def test_unknown_keys_are_ignored(tracker: Tracker) -> None:

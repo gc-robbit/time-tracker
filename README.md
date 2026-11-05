@@ -141,13 +141,15 @@ It refreshes once per second and accepts single-key commands:
 | `p`          | —     | pause       | —           |
 | `c`          | —     | —           | resume      |
 | `x`          | —     | stop        | stop        |
+| `Q`          | quit  | stop & quit | stop & quit |
 | `q` / Ctrl-C | quit  | quit        | quit        |
 
 Quitting with `q` or Ctrl-C only closes the view; a running or paused session
 stays active so you can pick it up again later. Use `x` to stop it from the
-view, or run `time-tracker stop` from another shell. If you leave a session
-running by mistake, `time-tracker stop --at ...` ends it at the time you
-actually stopped working (see [Recording a past day](#recording-a-past-day)).
+view, or `Q` to stop it and quit the view in one step, or run
+`time-tracker stop` from another shell. If you leave a session running by
+mistake, `time-tracker stop --at ...` ends it at the time you actually stopped
+working (see [Recording a past day](#recording-a-past-day)).
 
 Worked time, delta and flex use minute-level formatting; only the running
 session's `elapsed` value ticks in seconds. Changes made from another shell

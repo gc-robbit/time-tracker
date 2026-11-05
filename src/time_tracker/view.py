@@ -99,9 +99,9 @@ def key_hints(tracker: Tracker, project: str | None = None) -> str:
     """A one-line reminder of the keys that make sense in the current state."""
     state = tracker.state()
     if state == STATE_RUNNING:
-        return "[space] pause  [x] stop  [q] quit"
+        return "[space] pause  [x] stop  [Q] stop & quit  [q] quit"
     if state == STATE_PAUSED:
-        return "[space] continue  [x] stop  [q] quit"
+        return "[space] continue  [x] stop  [Q] stop & quit  [q] quit"
     name = (project or "").strip() or tracker.default_project
     label = f" '{name}'" if name else ""
     return f"[space] start{label}  [q] quit"
@@ -279,6 +279,10 @@ def apply_key(
         if key in QUIT_KEYS:
             return False, _quit_message(tracker)
         state = tracker.state()
+        if key == "Q":
+            if state == STATE_IDLE:
+                return False, None
+            return False, _stop(tracker)
         if key == " ":
             if state == STATE_IDLE:
                 return True, _start(tracker, project)

@@ -131,6 +131,24 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="DATE",
         help="end date (YYYY-MM-DD, 'today' or 'yesterday')",
     )
+    report.add_argument(
+        "--range",
+        dest="period",
+        metavar="PERIOD",
+        choices=(
+            "this-month",
+            "last-month",
+            "this-week",
+            "last-week",
+            "this-year",
+            "last-year",
+        ),
+        help=(
+            "report on a predefined calendar range instead of --start/--end "
+            "(this-month, last-month, this-week, last-week, this-year or "
+            "last-year)"
+        ),
+    )
     config = subparsers.add_parser("config", help="show or set configuration")
     # Let signed durations such as '-2h' through as a positional value instead
     # of argparse treating them as unknown options.
@@ -175,6 +193,16 @@ def _print_project_days(days: list[ProjectDay]) -> None:
 
 def _in_range(day: date, start: date | None, end: date | None) -> bool:
     return (start is None or day >= start) and (end is None or day <= end)
+
+
+def _range_label(start: date | None, end: date | None) -> str:
+    if start is not None and end is not None:
+        return f"between {start.isoformat()} and {end.isoformat()}"
+    if start is not None:
+        return f"on or after {start.isoformat()}"
+    if end is not None:
+        return f"on or before {end.isoformat()}"
+    return "yet"
 
 
 def _print_flex_section(
@@ -245,6 +273,9 @@ def _print_report(
         print(
             "No time tracked yet. Start a session with 'time-tracker start <project>'."
         )
+        return
+    if not any(_in_range(summary.day, start, end) for summary in summaries):
+        print(f"No time tracked {_range_label(start, end)}.")
         return
 
     if all_projects:
@@ -369,6 +400,25 @@ def _resolve_day(tracker: Tracker, value: str) -> date:
     return day
 
 
+def _resolve_period(today: date, period: str) -> tuple[date, date]:
+    """Resolve a named calendar range to inclusive start and end dates."""
+    if period == "this-month":
+        return today.replace(day=1), today
+    if period == "last-month":
+        end = today.replace(day=1) - timedelta(days=1)
+        return end.replace(day=1), end
+    if period == "this-week":
+        return today - timedelta(days=today.weekday()), today
+    if period == "last-week":
+        monday = today - timedelta(days=today.weekday())
+        return monday - timedelta(days=7), monday - timedelta(days=1)
+    if period == "this-year":
+        return date(today.year, 1, 1), today
+    if period == "last-year":
+        return date(today.year - 1, 1, 1), date(today.year - 1, 12, 31)
+    raise ValueError(f"invalid range {period!r}")
+
+
 def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
     command = args.command or "status"
     if command == "start":
@@ -464,12 +514,18 @@ def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
         project = (args.project or "").strip() or None
         if project is not None and args.all:
             raise ValueError("cannot combine a project with --all")
-        start = _resolve_day(tracker, args.start) if args.start else None
-        end = _resolve_day(tracker, args.end) if args.end else None
-        if start is None and end is None:
-            # With no explicit range, report on the current month to date.
-            end = tracker.now().astimezone().date()
-            start = end.replace(day=1)
+        if args.period and (args.start or args.end):
+            raise ValueError("cannot combine --range with --start/--end")
+        if args.period:
+            today = tracker.now().astimezone().date()
+            start, end = _resolve_period(today, args.period)
+        else:
+            start = _resolve_day(tracker, args.start) if args.start else None
+            end = _resolve_day(tracker, args.end) if args.end else None
+            if start is None and end is None:
+                # With no explicit range, report on the current month to date.
+                end = tracker.now().astimezone().date()
+                start = end.replace(day=1)
         if start is not None and end is not None and start > end:
             raise ValueError("start date must not be after end date")
         _print_report(

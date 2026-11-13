@@ -29,6 +29,7 @@ time-tracker watch web        # ... starting 'web' when idle
 time-tracker report           # current month's global flex history
 time-tracker report --all     # also break worked time down per project
 time-tracker report web       # worked time for one project only
+time-tracker report --range last-month             # a predefined calendar range
 time-tracker report --start 2026-10-01 --end 2026-10-15  # limit the range
 time-tracker log 2026-10-20 7h30m        # record a past day after the fact
 time-tracker log yesterday 7h30m web     # ... attributed to a project
@@ -88,10 +89,14 @@ Flex   : +1:30 overall
   time down per project, or name a project to report on just that one.
   `--start DATE` and `--end DATE` limit any report to an inclusive date range
   (accepting `YYYY-MM-DD`, `today` or `yesterday`); when neither is given the
-  range is the first of the current month through today. The flex balance
-  carried into the range is shown as the starting balance. The global report
-  includes an **Away** column for vacation and sick leave (see [Away
-  time](#away-time)).
+  range is the first of the current month through today. Use `--range PERIOD`
+  for a predefined range instead: `this-month`, `last-month`, `this-week`,
+  `last-week`, `this-year` or `last-year`. Weeks start on Monday; current
+  periods run through today, while `last-month`, `last-week` and `last-year`
+  cover the full previous period. `--range` cannot be combined with `--start`
+  or `--end`. The flex balance carried into the range is shown as the starting
+  balance. The global report includes an **Away** column for vacation and sick
+  leave (see [Away time](#away-time)).
 
 ### Live status view
 

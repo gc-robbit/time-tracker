@@ -57,10 +57,11 @@ jobs:
             git tag -f -a "${{ steps.bump.outputs.tag }}" -m "${{ steps.bump.outputs.tag }}"
           fi
       - run: uv run tools/build_dist.py
-      - name: Push bump commit and tag
+      - name: Push bump commit and tag atomically
         run: |
-          git push origin HEAD:main
-          git push origin "${{ steps.bump.outputs.tag }}"
+          # Push both refs together so a rejected tag does not leave main
+          # bumped without a matching tag or release.
+          git push --atomic origin HEAD:main "${{ steps.bump.outputs.tag }}"
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}

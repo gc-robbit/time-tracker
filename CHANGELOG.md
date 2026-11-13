@@ -1,3 +1,9 @@
+## v0.11.0 (2026-11-13)
+
+### Feat
+
+- add calendar range shortcuts to report
+
 ## v0.10.0 (2026-11-05)
 
 ### Feat

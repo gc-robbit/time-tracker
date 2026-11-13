@@ -1,12 +1,12 @@
 import os
 import time
 from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from datetime import time as dt_time
 
 import pytest
 
-from time_tracker.cli import _resolve_start_time, main
+from time_tracker.cli import _resolve_period, _resolve_start_time, main
 from time_tracker.storage import Storage
 from time_tracker.tracker import Tracker
 
@@ -347,12 +347,81 @@ def test_report_defaults_to_the_current_month(capsys) -> None:
     assert "Starting balance: +1:00" in out
 
 
+@pytest.mark.parametrize(
+    ("today", "period", "expected"),
+    [
+        (date(2026, 11, 13), "this-month", (date(2026, 11, 1), date(2026, 11, 13))),
+        (date(2026, 11, 13), "last-month", (date(2026, 10, 1), date(2026, 10, 31))),
+        (date(2026, 1, 15), "last-month", (date(2025, 12, 1), date(2025, 12, 31))),
+        (date(2026, 11, 13), "this-week", (date(2026, 11, 9), date(2026, 11, 13))),
+        (date(2026, 11, 13), "last-week", (date(2026, 11, 2), date(2026, 11, 8))),
+        (date(2026, 11, 13), "this-year", (date(2026, 1, 1), date(2026, 11, 13))),
+        (date(2026, 11, 13), "last-year", (date(2025, 1, 1), date(2025, 12, 31))),
+    ],
+)
+def test_resolve_period(today: date, period: str, expected: tuple[date, date]) -> None:
+    assert _resolve_period(today, period) == expected
+
+
+def test_report_range_last_month(capsys) -> None:
+    today = datetime.now().astimezone().date()
+    last_month_end = today.replace(day=1) - timedelta(days=1)
+    last_month_start = last_month_end.replace(day=1)
+    before = last_month_start - timedelta(days=1)
+
+    assert main(["log", before.isoformat(), "9h", "web"]) == 0
+    assert main(["log", last_month_start.isoformat(), "7h", "design"]) == 0
+    assert main(["log", today.isoformat(), "6h", "web"]) == 0
+    capsys.readouterr()
+
+    assert main(["report", "--range", "last-month"]) == 0
+    out = capsys.readouterr().out
+    assert last_month_start.isoformat() in out
+    assert today.isoformat() not in out
+    assert before.isoformat() not in out
+    # The flex from before the range is carried into it.
+    assert "Starting balance: +1:00" in out
+
+    assert main(["report", "design", "--range", "last-month"]) == 0
+    out = capsys.readouterr().out
+    assert "Project: design" in out
+    assert last_month_start.isoformat() in out
+    assert today.isoformat() not in out
+
+    assert main(["report", "--all", "--range", "last-month"]) == 0
+    out = capsys.readouterr().out
+    assert "Project: design" in out
+    assert "Project: web" not in out
+
+
+def test_report_range_with_no_tracked_time(capsys) -> None:
+    today = datetime.now().astimezone().date()
+    last_month_end = today.replace(day=1) - timedelta(days=1)
+    last_month_start = last_month_end.replace(day=1)
+    assert main(["log", today.isoformat(), "6h", "web"]) == 0
+    capsys.readouterr()
+
+    assert main(["report", "--range", "last-month"]) == 0
+    out = capsys.readouterr().out
+    assert (
+        f"No time tracked between "
+        f"{last_month_start.isoformat()} and {last_month_end.isoformat()}." in out
+    )
+    assert "Flex (global):" not in out
+
+
 def test_report_rejects_conflicting_or_invalid_ranges(capsys) -> None:
     assert main(["report", "web", "--all"]) == 1
     assert "cannot combine" in capsys.readouterr().err
 
     assert main(["report", "--start", _day(1), "--end", _day(3)]) == 1
     assert "start date must not be after end date" in capsys.readouterr().err
+
+    assert main(["report", "--range", "last-month", "--start", _day(1)]) == 1
+    assert "cannot combine --range with --start/--end" in capsys.readouterr().err
+
+    assert main(["report", "--range", "last-month", "--end", _day(1)]) == 1
+    assert "cannot combine --range with --start/--end" in capsys.readouterr().err
 
 
 def test_config_show_includes_default_project(capsys) -> None:

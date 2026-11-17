@@ -20,7 +20,7 @@ dev = [
     "commitizen>=4.19.3",
     "prek>=0.5.10",
     "pytest>=9.2.0",
-    "ruff>=0.17.4",
+    "ruff>=0.17.5",
 ]
 
 [tool.commitizen]

@@ -1,7 +1,7 @@
 """Tests for Storage-level queries and the event cache."""
 
 import sqlite3
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from time_tracker.storage import Storage
 
@@ -70,6 +70,39 @@ def test_manual_replacement_discards_entries_for_the_day(tmp_path) -> None:
             (day, 360),
             (next_day, 240),
         ]
+
+
+def test_delete_manual_entries_removes_only_requested_rows(tmp_path) -> None:
+    day = date(2026, 10, 20)
+    with Storage(tmp_path / "storage.db") as storage:
+        first = storage.add_manual_entry(day, 120, project="web")
+        second = storage.add_manual_entry(day, 60, project="design")
+        third = storage.add_manual_entry(day + timedelta(days=1), 240, project="web")
+
+        assert storage.delete_manual_entries([first.id, third.id]) == 2
+        assert [entry.id for entry in storage.manual_entries()] == [second.id]
+
+
+def test_delete_manual_entries_invalidates_the_cache(tmp_path) -> None:
+    day = date(2026, 10, 20)
+    with Storage(tmp_path / "storage.db") as storage:
+        entry = storage.add_manual_entry(day, 120, project="web")
+        assert [item.minutes for item in storage.manual_entries()] == [120]
+
+        assert storage.delete_manual_entries([entry.id]) == 1
+        assert storage.manual_entries() == []
+
+        replacement = storage.add_manual_entry(day, 30, project="web")
+        assert [item.id for item in storage.manual_entries()] == [replacement.id]
+
+
+def test_delete_manual_entries_handles_empty_and_unknown_ids(tmp_path) -> None:
+    with Storage(tmp_path / "storage.db") as storage:
+        storage.add_manual_entry(date(2026, 10, 20), 480, project="web")
+
+        assert storage.delete_manual_entries([]) == 0
+        assert storage.delete_manual_entries([999]) == 0
+        assert [entry.minutes for entry in storage.manual_entries()] == [480]
 
 
 def test_manual_entries_return_defensive_copies(tmp_path) -> None:

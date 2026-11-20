@@ -6,12 +6,26 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
+from .durations import format_duration
 from .storage import Event, ManualEntry, Storage
 
 DEFAULT_WORKDAY = timedelta(hours=8)
 ZERO = timedelta(0)
 
 AWAY_KINDS = ("vacation", "sick")
+
+
+def _logged_entry_label(entry: ManualEntry) -> str:
+    """Short description of a manual entry for ambiguity errors."""
+    duration = format_duration(timedelta(minutes=entry.minutes))
+    if entry.kind:
+        detail = f"{entry.kind} leave"
+    elif entry.project:
+        detail = f"'{entry.project}'"
+    else:
+        detail = "(unnamed)"
+    return f"id {entry.id} ({duration} {detail})"
+
 
 STATE_IDLE = "idle"
 STATE_RUNNING = "running"
@@ -223,6 +237,50 @@ class Tracker:
         return self.storage.add_manual_entry(
             day, minutes, project=project, replaces=replace, kind=kind
         )
+
+    def logged_entries(self, day: date | None = None) -> list[ManualEntry]:
+        """Manual day entries, optionally filtered to one day."""
+        entries = self.storage.manual_entries()
+        if day is None:
+            return entries
+        return [entry for entry in entries if entry.day == day]
+
+    def remove_logged_entry(
+        self, entry_id: int, day: date | None = None
+    ) -> ManualEntry:
+        """Remove a manual entry by id, optionally checking its day."""
+        entry = next(
+            (entry for entry in self.storage.manual_entries() if entry.id == entry_id),
+            None,
+        )
+        if entry is None:
+            raise ValueError(f"no logged entry with id {entry_id}")
+        if day is not None and entry.day != day:
+            raise ValueError(f"logged entry {entry_id} is not on {day.isoformat()}")
+        self.storage.delete_manual_entries([entry_id])
+        return entry
+
+    def remove_logged_day(
+        self, day: date, *, entry_id: int | None = None
+    ) -> ManualEntry:
+        """Remove a manual entry recorded for a given day."""
+        entries = self.logged_entries(day)
+        if not entries:
+            raise ValueError(f"no logged entries on {day.isoformat()}")
+        if entry_id is None:
+            if len(entries) > 1:
+                candidates = ", ".join(_logged_entry_label(entry) for entry in entries)
+                raise ValueError(
+                    f"{day.isoformat()} has {len(entries)} logged entries; "
+                    f"use --list and specify --id N (candidates: {candidates})"
+                )
+            entry = entries[0]
+        else:
+            entry = next((entry for entry in entries if entry.id == entry_id), None)
+            if entry is None:
+                raise ValueError(f"logged entry {entry_id} is not on {day.isoformat()}")
+        self.storage.delete_manual_entries([entry.id])
+        return entry
 
     # -- derived data ------------------------------------------------------
 

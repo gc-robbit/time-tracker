@@ -472,6 +472,125 @@ def test_away_rejects_unknown_kind(tracker: Tracker, clock: FakeClock) -> None:
         tracker.log_away_day(day, "holiday")
 
 
+def test_logged_entries_lists_and_filters_by_day(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    day = clock.current.astimezone().date()
+    first = tracker.log_day(day, timedelta(hours=1), "web")
+    previous = tracker.log_day(day - timedelta(days=1), timedelta(hours=2), "design")
+
+    assert tracker.logged_entries() == [previous, first]
+    assert tracker.logged_entries(day) == [first]
+    assert tracker.logged_entries(day - timedelta(days=2)) == []
+
+
+def test_remove_logged_entry_leaves_events_untouched(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    tracker.start("web")
+    clock.advance(hours=2)
+    tracker.stop()
+    day = clock.current.astimezone().date()
+    entry = tracker.log_day(day, timedelta(hours=3), "design")
+    events = tracker.storage.events()
+
+    assert tracker.remove_logged_entry(entry.id) == entry
+
+    assert tracker.logged_entries() == []
+    assert tracker.storage.events() == events
+    assert tracker.today_summary().worked == timedelta(hours=2)
+    assert tracker.today_summary().delta == -timedelta(hours=6)
+    assert tracker.flex_balance() == -timedelta(hours=6)
+    assert set(tracker.project_days()) == {"web"}
+    assert tracker.project_days()["web"][0].worked == timedelta(hours=2)
+
+
+def test_remove_logged_day_with_id_keeps_other_entries(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    day = clock.current.astimezone().date()
+    first = tracker.log_day(day, timedelta(hours=1), "web")
+    second = tracker.log_day(day, timedelta(minutes=30), "design")
+
+    assert tracker.remove_logged_day(day, entry_id=second.id) == second
+
+    assert tracker.logged_entries(day) == [first]
+    assert tracker.today_summary().worked == timedelta(hours=1)
+    assert set(tracker.project_days()) == {"web"}
+
+
+def test_remove_logged_day_needs_an_id_when_the_day_has_several_entries(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    day = clock.current.astimezone().date()
+    tracker.log_day(day, timedelta(hours=1), "web")
+    tracker.log_day(day, timedelta(minutes=30), "design")
+
+    with pytest.raises(ValueError, match="has 2 logged entries"):
+        tracker.remove_logged_day(day)
+
+    assert len(tracker.logged_entries(day)) == 2
+
+
+def test_remove_logged_entry_rejects_unknown_id_and_wrong_day(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    day = clock.current.astimezone().date()
+    entry = tracker.log_day(day, timedelta(hours=1), "web")
+
+    with pytest.raises(ValueError, match="no logged entry with id 999"):
+        tracker.remove_logged_entry(999)
+    with pytest.raises(ValueError, match="is not on"):
+        tracker.remove_logged_entry(entry.id, day + timedelta(days=1))
+    with pytest.raises(ValueError, match="is not on"):
+        tracker.remove_logged_day(day, entry_id=999)
+
+    assert tracker.logged_entries() == [entry]
+
+
+def test_remove_logged_day_with_no_entries_errors(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    day = clock.current.astimezone().date()
+    with pytest.raises(ValueError, match="no logged entries on"):
+        tracker.remove_logged_day(day)
+
+
+def test_remove_away_entry_restores_flex(tracker: Tracker, clock: FakeClock) -> None:
+    tracker.start("web")
+    clock.advance(hours=2)
+    tracker.stop()
+    day = clock.current.astimezone().date()
+    entry = tracker.log_away_day(day, "sick")
+    assert tracker.today_summary().delta == timedelta(0)
+
+    tracker.remove_logged_entry(entry.id)
+
+    summary = tracker.today_summary()
+    assert summary.away == timedelta(0)
+    assert summary.worked == timedelta(hours=2)
+    assert summary.delta == -timedelta(hours=6)
+    assert tracker.flex_balance() == -timedelta(hours=6)
+
+
+def test_remove_override_restores_tracked_time(
+    tracker: Tracker, clock: FakeClock
+) -> None:
+    tracker.start("web")
+    clock.advance(hours=2)
+    tracker.stop()
+    day = clock.current.astimezone().date()
+    override = tracker.log_day(day, timedelta(hours=6), "design", replace=True)
+    assert set(tracker.project_days()) == {"design"}
+
+    tracker.remove_logged_entry(override.id)
+
+    assert tracker.today_summary().worked == timedelta(hours=2)
+    assert tracker.today_summary().delta == -timedelta(hours=6)
+    assert set(tracker.project_days()) == {"web"}
+    assert tracker.log_day(day, timedelta(hours=1), "design").day == day
+
+
 def test_flex_buffer_is_added_to_the_balance(
     tracker: Tracker, clock: FakeClock
 ) -> None:

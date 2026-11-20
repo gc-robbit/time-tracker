@@ -1,3 +1,9 @@
+## v0.12.0 (2026-11-20)
+
+### Feat
+
+- support removal of logged day entries (#50)
+
 ## v0.11.0 (2026-11-13)
 
 ### Feat

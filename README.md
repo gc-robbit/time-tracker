@@ -172,7 +172,7 @@ time-tracker log 2026-10-20 7h30m          # log time for that day
 time-tracker log yesterday 7h30m web       # attribute it to a project
 time-tracker log 2026-10-20 8h --replace   # make 8h the day's total
 time-tracker log --list                    # list logged manual entries
-time-tracker log yesterday --delete       # remove the single entry on that day
+time-tracker log yesterday --delete        # remove the single entry on that day
 time-tracker log --delete --id 3           # remove a specific entry (no date needed)
 ```
 

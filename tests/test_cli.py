@@ -15,6 +15,11 @@ def _day(days_ago: int = 0) -> str:
     return (datetime.now().astimezone().date() - timedelta(days=days_ago)).isoformat()
 
 
+def _logged_entry_ids() -> list[int]:
+    with Storage() as storage:
+        return [entry.id for entry in storage.manual_entries()]
+
+
 @pytest.fixture
 def amsterdam_tz() -> Iterator[None]:
     if not hasattr(time, "tzset"):
@@ -654,6 +659,150 @@ def test_log_rejects_invalid_input(capsys) -> None:
 
     assert main(["log", _day(), "banana"]) == 1
     assert "invalid duration" in capsys.readouterr().err
+
+
+def test_log_list_shows_logged_entries(capsys) -> None:
+    day = _day(1)
+    assert main(["log", day, "7h30m", "web"]) == 0
+    assert main(["log", _day(2), "--sick"]) == 0
+    capsys.readouterr()
+
+    assert main(["log", "--list"]) == 0
+    out = capsys.readouterr().out
+    assert "ID" in out
+    assert day in out
+    assert "web" in out
+    assert "7:30" in out
+    assert "sick leave" in out
+    assert "override" not in out
+
+    assert main(["log", "--list", day]) == 0
+    out = capsys.readouterr().out
+    assert "web" in out
+    assert "sick leave" not in out
+
+
+def test_log_list_when_empty(capsys) -> None:
+    assert main(["log", "--list"]) == 0
+    assert capsys.readouterr().out.strip() == "No logged entries."
+
+
+def test_log_list_marks_overrides(capsys) -> None:
+    day = _day(1)
+    assert main(["log", day, "6h", "web", "--replace"]) == 0
+    capsys.readouterr()
+
+    assert main(["log", "--list"]) == 0
+    out = capsys.readouterr().out
+    assert "override" in out
+    assert "6:00" in out
+
+
+def test_log_delete_by_id_without_a_date(capsys) -> None:
+    day = _day(1)
+    assert main(["log", day, "7h30m", "web"]) == 0
+    entry_id = _logged_entry_ids()[0]
+    capsys.readouterr()
+
+    assert main(["log", "--delete", "--id", str(entry_id)]) == 0
+    out = capsys.readouterr().out
+    assert f"Removed logged 7:30 for 'web' on {day} (id {entry_id})." in out
+    assert "day total" not in out
+
+    assert main(["log", "--list"]) == 0
+    assert "No logged entries." in capsys.readouterr().out
+    assert main(["report", "--start", day]) == 0
+    assert "No time tracked yet" in capsys.readouterr().out
+
+
+def test_log_delete_by_day_with_one_entry(capsys) -> None:
+    day = _day(1)
+    assert main(["log", day, "8h", "web"]) == 0
+    entry_id = _logged_entry_ids()[0]
+    capsys.readouterr()
+
+    assert main(["log", day, "--delete"]) == 0
+    out = capsys.readouterr().out
+    assert f"Removed logged 8:00 for 'web' on {day} (id {entry_id})." in out
+
+    assert main(["log", day, "--delete"]) == 1
+    assert "no logged entries" in capsys.readouterr().err
+
+
+def test_log_delete_away_and_override_entries(capsys) -> None:
+    day = _day(1)
+    assert main(["log", day, "--vacay"]) == 0
+    away_id = _logged_entry_ids()[0]
+    capsys.readouterr()
+
+    assert main(["log", "--delete", "--id", str(away_id)]) == 0
+    assert f"Removed logged 8:00 vacation on {day} (id {away_id})." in (
+        capsys.readouterr().out
+    )
+
+    assert main(["log", day, "6h", "design", "--replace"]) == 0
+    override_id = _logged_entry_ids()[0]
+    capsys.readouterr()
+
+    assert main(["log", "--delete", "--id", str(override_id)]) == 0
+    assert f"Removed overriding entry for {day} (id {override_id});" in (
+        capsys.readouterr().out
+    )
+
+
+def test_log_delete_reports_ambiguous_and_invalid_targets(capsys) -> None:
+    day = _day(1)
+    assert main(["log", day, "1h", "web"]) == 0
+    assert main(["log", day, "30m", "design"]) == 0
+    assert main(["log", _day(2), "2h", "docs"]) == 0
+    ids = _logged_entry_ids()
+    capsys.readouterr()
+
+    assert main(["log", day, "--delete"]) == 1
+    err = capsys.readouterr().err
+    assert "has 2 logged entries" in err
+    assert "specify --id" in err
+
+    assert main(["log", "--delete"]) == 1
+    assert "needs a DATE or --id" in capsys.readouterr().err
+
+    assert main(["log", "--delete", "--id", "999"]) == 1
+    assert "no logged entry with id 999" in capsys.readouterr().err
+
+    assert main(["log", day, "--delete", "--id", str(ids[0])]) == 1
+    assert "is not on" in capsys.readouterr().err
+
+    assert main(["log", day, "--delete", "--id", str(ids[1])]) == 0
+    assert f"(id {ids[1]})." in capsys.readouterr().out
+
+
+def test_log_list_and_delete_reject_logging_options(capsys) -> None:
+    day = _day(1)
+    assert main(["log", day, "8h", "web"]) == 0
+    entry_id = _logged_entry_ids()[0]
+    capsys.readouterr()
+
+    assert main(["log", day, "8h", "--list"]) == 1
+    assert "--list cannot be combined" in capsys.readouterr().err
+
+    assert main(["log", day, "8h", "--delete", "--id", str(entry_id)]) == 1
+    assert "--delete cannot be combined" in capsys.readouterr().err
+
+    assert main(["log", "--delete", "--id", str(entry_id), "--sick"]) == 1
+    assert "--delete cannot be combined" in capsys.readouterr().err
+
+    assert main(["log", day, "8h", "--id", str(entry_id)]) == 1
+    assert "--id can only be used with --delete" in capsys.readouterr().err
+
+    with pytest.raises(SystemExit):
+        main(["log", day, "8h", "--delete", "--replace"])
+    assert "not allowed with argument" in capsys.readouterr().err
+
+    assert main(["log", "--list", "--sick"]) == 1
+    assert "--list cannot be combined" in capsys.readouterr().err
+
+    assert main(["log"]) == 1
+    assert "missing DATE" in capsys.readouterr().err
 
 
 def test_corrupt_db_reports_clean_error(tmp_path, capsys) -> None:

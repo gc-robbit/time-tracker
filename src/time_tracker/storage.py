@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -174,6 +175,21 @@ class Storage:
             replaces=replaces,
             kind=kind,
         )
+
+    def delete_manual_entries(self, ids: Sequence[int]) -> int:
+        """Delete manual entries by id, returning the number removed."""
+        identifiers = list(ids)
+        if not identifiers:
+            return 0
+        placeholders = ", ".join("?" for _ in identifiers)
+        with self._conn:
+            cursor = self._conn.execute(
+                f"DELETE FROM manual_entries WHERE id IN ({placeholders})",
+                identifiers,
+            )
+        if cursor.rowcount:
+            self._manual_cache = None
+        return cursor.rowcount
 
     def manual_entries(self) -> list[ManualEntry]:
         """All manual day entries, sorted by day and insertion order."""

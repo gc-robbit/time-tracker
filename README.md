@@ -171,6 +171,9 @@ Use `log` to fill in a day you did not track live:
 time-tracker log 2026-10-20 7h30m          # log time for that day
 time-tracker log yesterday 7h30m web       # attribute it to a project
 time-tracker log 2026-10-20 8h --replace   # make 8h the day's total
+time-tracker log --list                    # list logged manual entries
+time-tracker log yesterday --delete       # remove the single entry on that day
+time-tracker log --delete --id 3           # remove a specific entry (no date needed)
 ```
 
 The date accepts `YYYY-MM-DD`, `today` or `yesterday`; future dates are
@@ -186,6 +189,16 @@ rejected. Durations use the same formats as elsewhere (`7h30m`, `7:30`, `45m`).
   appear in per-project reports.
 - Manual days appear in `status`, `report` and the flex history exactly like
   tracked days, including the daily target and delta.
+- `log --list` shows manual entries with their ids (optionally filtered to one
+  date). Use `log <DATE> --delete` when the day has a single entry, or
+  `log --delete --id N` to remove a specific entry — the date is optional with
+  `--id`. If several entries share a day, an id is required; there is no bulk
+  delete.
+
+Removing a logged entry only affects manual time: tracked sessions are never
+deleted by `log --delete`. To correct a session that was tracked live, use
+`stop --at ...` instead. Deleting an override lets the day's tracked time count
+again; deleting an away entry makes the day affect flex again.
 
 ### Away time
 
@@ -222,7 +235,9 @@ that crosses midnight counts toward the day it started. Backfilled days live
 in a separate `manual_entries` table: additive entries merge with the event
 log, while a replacement entry takes precedence over everything for that date.
 An optional kind marks away time (`vacation` or `sick`) instead of worked
-time. Databases created before projects existed are migrated automatically.
+time. Manual entries can be removed with `log --delete`; the event log itself
+stays append-only. Databases created before projects existed are migrated
+automatically.
 
 ## Development
 

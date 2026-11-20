@@ -17,7 +17,7 @@ from .durations import (
     parse_signed_duration,
     parse_time_of_day,
 )
-from .storage import Storage, default_db_path
+from .storage import ManualEntry, Storage, default_db_path
 from .tracker import InvalidTransitionError, ProjectDay, Tracker
 from .view import run_view, status_lines
 
@@ -40,11 +40,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="start at this local time today instead of now (e.g. 09:30)",
     )
     log = subparsers.add_parser(
-        "log", help="record worked time for a past day (or a full day of leave)"
+        "log",
+        help="record, list or remove logged time for a past day (or a day of leave)",
     )
     log.add_argument(
         "date",
         metavar="DATE",
+        nargs="?",
         help="local date (YYYY-MM-DD, 'today' or 'yesterday')",
     )
     log.add_argument(
@@ -58,10 +60,27 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="?",
         help="project to attribute the time to (falls back to the configured default)",
     )
-    log.add_argument(
+    mode = log.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--list",
+        action="store_true",
+        help="list logged manual entries (optionally limited to DATE)",
+    )
+    mode.add_argument(
+        "--delete",
+        action="store_true",
+        help="remove a logged manual entry",
+    )
+    mode.add_argument(
         "--replace",
         action="store_true",
         help="replace all tracked and manual time for that day",
+    )
+    log.add_argument(
+        "--id",
+        type=int,
+        metavar="ID",
+        help="id of the logged entry to remove (with --delete; DATE is optional)",
     )
     leave = log.add_mutually_exclusive_group()
     leave.add_argument(
@@ -178,6 +197,45 @@ def _print_table(headers: tuple[str, ...], rows: list[tuple[str, ...]]) -> None:
 
 def _project_label(project: str) -> str:
     return project or "(unnamed)"
+
+
+def _logged_entry_detail(entry: ManualEntry) -> str:
+    if entry.kind:
+        return f"{entry.kind} leave"
+    return _project_label(entry.project or "")
+
+
+def _print_logged_entries(entries: list[ManualEntry]) -> None:
+    if not entries:
+        print("No logged entries.")
+        return
+    rows = [
+        (
+            str(entry.id),
+            entry.day.isoformat(),
+            _logged_entry_detail(entry),
+            format_duration(timedelta(minutes=entry.minutes)),
+            "override" if entry.replaces else "",
+        )
+        for entry in entries
+    ]
+    _print_table(("ID", "Date", "Entry", "Time", "Note"), rows)
+
+
+def _print_removed_logged_entry(entry: ManualEntry) -> None:
+    if entry.replaces:
+        print(
+            f"Removed overriding entry for {entry.day.isoformat()} "
+            f"(id {entry.id}); tracked time counts again."
+        )
+        return
+    detail = f" {entry.kind}" if entry.kind else ""
+    if not detail and entry.project:
+        detail = f" for '{entry.project}'"
+    print(
+        f"Removed logged {format_duration(timedelta(minutes=entry.minutes))}{detail} "
+        f"on {entry.day.isoformat()} (id {entry.id})."
+    )
 
 
 def _print_status(tracker: Tracker) -> None:
@@ -461,6 +519,39 @@ def _dispatch(args: argparse.Namespace, tracker: Tracker) -> None:
     elif command == "config":
         _run_config(args, tracker)
     elif command == "log":
+        if args.id is not None and not args.delete:
+            raise ValueError("--id can only be used with --delete")
+        if args.list:
+            if (
+                args.duration is not None
+                or (args.project or "").strip()
+                or args.away is not None
+                or args.id is not None
+            ):
+                raise ValueError("--list cannot be combined with logging options")
+            day = _resolve_day(tracker, args.date) if args.date else None
+            _print_logged_entries(tracker.logged_entries(day))
+            return
+        if args.delete:
+            if args.duration is not None or (args.project or "").strip():
+                raise ValueError(
+                    "--delete cannot be combined with a duration or project"
+                )
+            if args.away is not None:
+                raise ValueError("--delete cannot be combined with --sick/--vacay")
+            if args.id is not None:
+                day = _resolve_day(tracker, args.date) if args.date else None
+                entry = tracker.remove_logged_entry(args.id, day)
+            elif args.date is not None:
+                entry = tracker.remove_logged_day(_resolve_day(tracker, args.date))
+            else:
+                raise ValueError("--delete needs a DATE or --id N")
+            _print_removed_logged_entry(entry)
+            return
+        if args.date is None:
+            raise ValueError(
+                "missing DATE (expected YYYY-MM-DD, 'today' or 'yesterday')"
+            )
         day = _resolve_day(tracker, args.date)
         if args.away is not None:
             if args.duration is not None:

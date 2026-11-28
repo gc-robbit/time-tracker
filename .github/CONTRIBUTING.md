@@ -104,6 +104,13 @@ uv run tools/build_dist.py --check  # verify an existing file is up to date
 Downloaded release assets do not keep the executable bit, so run
 `chmod +x time-tracker` once after downloading.
 
+## Dependabot updates
+
+Dependabot proposes weekly updates for Python dependencies and GitHub Actions.
+A workflow approves minor and patch updates and enables auto-merge, so they
+land once CI passes and the PR is up to date with `main`. Major updates are
+left for manual review.
+
 ## Releases
 
 Releases are cut manually from the **Release** workflow (`workflow_dispatch`).

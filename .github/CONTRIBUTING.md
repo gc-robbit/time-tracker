@@ -111,6 +111,20 @@ A workflow approves minor and patch updates and enables auto-merge, so they
 land once CI passes and the PR is up to date with `main`. Major updates are
 left for manual review.
 
+The workflow uses a dedicated fine-grained PAT stored as the Dependabot secret
+`DEPENDABOT_AUTOMERGE_TOKEN`. Scope it to this repository with **Contents: read
+and write**, **Pull requests: read and write**, and **Workflows: read and
+write**, then add it with:
+
+```sh
+gh secret set DEPENDABOT_AUTOMERGE_TOKEN --app dependabot
+```
+
+Dependabot PRs cannot read Actions secrets, and `GITHUB_TOKEN` can never merge
+a change under `.github/workflows/`, so an Actions secret or the default token
+would leave GitHub Actions bumps stuck after CI passes. The workflow itself
+never checks out PR code and pins `dependabot/fetch-metadata` to a commit SHA.
+
 ## Releases
 
 Releases are cut manually from the **Release** workflow (`workflow_dispatch`).
